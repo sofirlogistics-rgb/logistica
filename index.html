@@ -1,0 +1,4395 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>ST Logística</title>
+<meta name="description" content="Sistema de controle de Solicitações de Transporte" />
+
+<!-- PWA -->
+<link rel="manifest" href="./manifest.json" />
+<meta name="theme-color" content="#0A0A0A" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="ST Logística" />
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+<link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png" />
+
+<!-- Fonts: Space Grotesk (display, números de ST, identidade) + Inter (UI/corpo) -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+<!-- Tailwind (Play CDN) -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          ink: {
+            DEFAULT: "#0A0A0A",
+            soft: "#161616",
+            card: "#1A1A1A",
+          },
+          paper: "#FFFFFF",
+          mist: "#F5F5F6",
+          line: "#E7E7E9",
+          muted: "#71717A",
+          brand: {
+            DEFAULT: "#E11D2E",
+            dark: "#B3121F",
+            soft: "#FCE7E8",
+          },
+        },
+        fontFamily: {
+          display: ["'Space Grotesk'", "sans-serif"],
+          sans: ["'Inter'", "sans-serif"],
+        },
+        boxShadow: {
+          soft: "0 1px 2px rgba(10,10,10,0.04), 0 4px 16px rgba(10,10,10,0.06)",
+          lift: "0 8px 24px rgba(10,10,10,0.10)",
+        },
+        borderRadius: {
+          xl2: "1.25rem",
+        },
+        keyframes: {
+          fadeUp: { "0%": { opacity: 0, transform: "translateY(6px)" }, "100%": { opacity: 1, transform: "translateY(0)" } },
+          shimmer: { "0%": { backgroundPosition: "-400px 0" }, "100%": { backgroundPosition: "400px 0" } },
+          pulseDot: { "0%,100%": { transform: "scale(1)", opacity: 1 }, "50%": { transform: "scale(1.4)", opacity: 0.6 } },
+          toastIn: { "0%": { opacity: 0, transform: "translateY(8px) scale(0.98)" }, "100%": { opacity: 1, transform: "translateY(0) scale(1)" } },
+        },
+        animation: {
+          fadeUp: "fadeUp .35s ease-out both",
+          shimmer: "shimmer 1.6s linear infinite",
+          pulseDot: "pulseDot 1.6s ease-in-out infinite",
+          toastIn: "toastIn .25s cubic-bezier(.2,.8,.2,1) both",
+        },
+      },
+    },
+  };
+</script>
+
+<!-- Lucide icons (substitui lucide-react — não há build step). Versão fixa: evita quebras se o pacote mudar de formato no futuro. -->
+<script src="https://unpkg.com/lucide@0.417.0/dist/umd/lucide.js"></script>
+
+<!-- React (via CDN, sem build step). Versão fixa. -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
+<!-- @babel/standalone: versão FIXA na série 7. A tag @latest passou a
+     apontar para o Babel 8, que é distribuído só como módulo ES —
+     carregado como script clássico, quebra com "Cannot use import
+     statement outside a module". Nunca remova esse pin de versão. -->
+<script src="https://unpkg.com/@babel/standalone@7.26.7/babel.min.js"></script>
+
+<!-- Exportação de relatórios (Parte 9) — versões fixas -->
+<script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
+<!-- Leitura de PDF (importação automática de itens do Pedido de Compras na Nova ST) — versão fixa -->
+<script src="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script>
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+  }
+</script>
+
+<style>
+  :root {
+    color-scheme: light;
+  }
+  html, body { height: 100%; }
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #F5F5F6;
+    color: #0A0A0A;
+    -webkit-font-smoothing: antialiased;
+  }
+  .font-display { font-family: 'Space Grotesk', sans-serif; }
+
+  /* numeração de ST usa tabular nums para alinhar dígitos */
+  .st-number { font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+
+  ::selection { background: #E11D2E; color: #fff; }
+
+  /* scrollbar discreta */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #D4D4D8; border-radius: 8px; }
+  ::-webkit-scrollbar-thumb:hover { background: #A1A1AA; }
+
+  /* foco visível para acessibilidade */
+  :focus-visible { outline: 2px solid #E11D2E; outline-offset: 2px; border-radius: 6px; }
+
+  .skeleton {
+    background: linear-gradient(90deg, #ECECEE 0%, #F7F7F8 50%, #ECECEE 100%);
+    background-size: 800px 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+  }
+
+  /* Tela de carregamento inicial (antes do React montar) */
+  #boot-screen {
+    position: fixed; inset: 0; background: #0A0A0A; color: #fff;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+    z-index: 9999;
+  }
+  #boot-screen .boot-logo {
+    width: 56px; height: 56px; border-radius: 16px; background: #E11D2E;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 20px;
+  }
+  #boot-screen .boot-track {
+    width: 140px; height: 3px; background: #262626; border-radius: 999px; overflow: hidden;
+  }
+  #boot-screen .boot-progress {
+    width: 40%; height: 100%; background: #fff; border-radius: 999px;
+    animation: bootMove 1.1s ease-in-out infinite;
+  }
+  @keyframes bootMove {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(350%); }
+  }
+</style>
+</head>
+<body>
+
+<div id="boot-screen">
+  <div class="boot-logo">ST</div>
+  <div class="boot-track"><div class="boot-progress"></div></div>
+</div>
+
+<div id="root"></div>
+
+<!-- ============================================================
+     FIREBASE — SDK legado v8 (100% clássico, sem ES modules e
+     sem import() dinâmico internamente). O SDK v9/v10, mesmo em
+     modo "compat", usa import() por baixo dos panos e por isso
+     não funciona de forma confiável abrindo o arquivo via file://.
+     A v8 evita esse problema por completo.
+     ============================================================ -->
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
+<script>
+(function () {
+  const firebaseConfig = {
+    apiKey: "AIzaSyC8U6AjKIga3jDZc1QzYcbf_pH8LAztQJ4",
+    authDomain: "sofir-logistics.firebaseapp.com",
+    projectId: "sofir-logistics",
+    storageBucket: "sofir-logistics.firebasestorage.app",
+    messagingSenderId: "897848530347",
+    appId: "1:897848530347:web:e1cb65005b84b48fedeeee",
+    measurementId: "G-6K5FEY1ZDR",
+  };
+
+  if (typeof firebase === "undefined") {
+    console.error("SDK do Firebase não carregou (bloqueio de rede?).");
+    window.ST = window.ST || {};
+    window.dispatchEvent(new Event("st:firebase-failed"));
+    return;
+  }
+
+  const app = firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+  const storage = firebase.storage();
+
+  // -------- shim: mesma "assinatura" da API modular (v9+), rodando
+  // por baixo dos panos sobre o SDK compat (v8-style), clássico. Isso
+  // permite manter todo o resto do código do app sem alterações.
+  function wrapSnap(snap) {
+    return { exists: () => !!snap.exists, data: () => snap.data(), id: snap.id, ref: snap.ref };
+  }
+  function onAuthStateChanged(authInst, cb) { return authInst.onAuthStateChanged(cb); }
+  function signInWithEmailAndPassword(authInst, email, pw) { return authInst.signInWithEmailAndPassword(email, pw); }
+  function createUserWithEmailAndPassword(authInst, email, pw) { return authInst.createUserWithEmailAndPassword(email, pw); }
+  function updatePassword(user, pw) { return user.updatePassword(pw); }
+  function signOut(authInst) { return authInst.signOut(); }
+
+  function doc(dbInst, collectionName, id) { return dbInst.collection(collectionName).doc(id); }
+  function getDoc(docRef) { return docRef.get().then(wrapSnap); }
+  function getDocs(q) { return q.get(); }
+  function setDoc(docRef, data, options) { return docRef.set(data, options || {}); }
+  function updateDoc(docRef, data) { return docRef.update(data); }
+  function deleteDoc(docRef) { return docRef.delete(); }
+  function addDoc(collRef, data) { return collRef.add(data); }
+  function collection(dbInst, name) { return dbInst.collection(name); }
+  function onSnapshot(ref, cb, errCb) { return ref.onSnapshot(cb, errCb); }
+  function orderBy(field, dir) { return (q) => q.orderBy(field, dir || "asc"); }
+  function where(field, op, val) { return (q) => q.where(field, op, val); }
+  function limit(n) { return (q) => q.limit(n); }
+  function query(base, ...constraints) { return constraints.reduce((acc, fn) => fn(acc), base); }
+  function serverTimestamp() { return firebase.firestore.FieldValue.serverTimestamp(); }
+  function increment(n) { return firebase.firestore.FieldValue.increment(n); }
+  function runTransaction(dbInst, updateFn) {
+    return dbInst.runTransaction((tx) =>
+      updateFn({
+        get: (ref) => tx.get(ref).then(wrapSnap),
+        set: (ref, data, opts) => tx.set(ref, data, opts),
+        update: (ref, data) => tx.update(ref, data),
+        delete: (ref) => tx.delete(ref),
+      })
+    );
+  }
+
+  function storageRef(storageInst, path) { return storageInst.ref(path); }
+  function uploadBytes(ref, file) {
+    return new Promise((resolve, reject) => {
+      const task = ref.put(file);
+      const timer = setTimeout(() => {
+        try { task.cancel(); } catch (e) {}
+        reject(new Error(`Tempo esgotado enviando "${file.name}". Confira as regras do Storage no Firebase.`));
+      }, 45000);
+      task.on(
+        "state_changed",
+        null,
+        (err) => {
+          clearTimeout(timer);
+          if (err.code === "storage/unauthorized") {
+            reject(new Error(`Sem permissão para enviar "${file.name}" — as regras do Storage no Firebase precisam permitir usuários autenticados.`));
+          } else if (err.code === "storage/canceled") {
+            reject(new Error(`Envio de "${file.name}" cancelado (tempo esgotado).`));
+          } else {
+            reject(err);
+          }
+        },
+        () => {
+          clearTimeout(timer);
+          resolve({ ref: task.snapshot.ref });
+        }
+      );
+    });
+  }
+  function getDownloadURL(ref) { return ref.getDownloadURL(); }
+  function deleteObject(ref) { return ref.delete(); }
+
+  // Cria a conta de OUTRA pessoa (setor ou motorista) sem deslogar quem
+  // está usando o app agora. Necessário porque criar um usuário no
+  // Firebase Auth pelo cliente normalmente troca a sessão ativa para
+  // o usuário recém-criado — usamos um app Firebase secundário e
+  // descartável só para esse fim.
+  async function createAuthAccountKeepSession(email, password) {
+    const secondary = firebase.initializeApp(firebaseConfig, "Secondary-" + Date.now());
+    try {
+      const cred = await secondary.auth().createUserWithEmailAndPassword(email, password);
+      const uid = cred.user.uid;
+      await secondary.auth().signOut();
+      return uid;
+    } finally {
+      await secondary.delete();
+    }
+  }
+
+  window.ST = window.ST || {};
+  window.ST.firebase = {
+    app, auth, db, storage,
+    onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, updatePassword, signOut,
+    doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, collection, query, where, orderBy, limit,
+    onSnapshot, serverTimestamp, increment, runTransaction,
+    storageRef, uploadBytes, getDownloadURL, deleteObject,
+    createAuthAccountKeepSession,
+  };
+  window.dispatchEvent(new Event("st:firebase-ready"));
+})();
+</script>
+
+
+<!-- ============================================================
+     APP — shell React + design system (Parte 1)
+     ============================================================ -->
+<script type="text/plain" id="app-source">
+const { useState, useEffect, useCallback, useRef, createContext, useContext } = React;
+
+/* ---------------------------------------------------------------
+   ROUTER — hash router simples (substitui react-router-dom, que
+   não tem build UMD estável para uso sem bundler)
+--------------------------------------------------------------- */
+const RouterContext = createContext(null);
+
+function useHashPath() {
+  const [path, setPath] = useState(() => window.location.hash.slice(1) || "/login");
+  useEffect(() => {
+    const onChange = () => setPath(window.location.hash.slice(1) || "/login");
+    window.addEventListener("hashchange", onChange);
+    return () => window.removeEventListener("hashchange", onChange);
+  }, []);
+  return path;
+}
+
+function navigate(path) {
+  window.location.hash = path;
+}
+
+function RouterProvider({ children }) {
+  const path = useHashPath();
+  return <RouterContext.Provider value={{ path, navigate }}>{children}</RouterContext.Provider>;
+}
+
+function useRouter() {
+  return useContext(RouterContext);
+}
+
+/* ---------------------------------------------------------------
+   SETORES — lista fixa da empresa (não são mais login — são só a
+   opção de setor atribuída a cada usuário cadastrado)
+--------------------------------------------------------------- */
+const DEPARTMENTS = [
+  "Almoxarifado", "Caldeiraria", "Comercial", "Compras", "Controle de Qualidade",
+  "Diretoria", "Financeiro", "Manutenção", "Orçamentos", "PCP", "Pintura",
+  "Portaria", "Produção", "RH", "Secretaria", "Segurança do Trabalho",
+  "Servisse", "Systems", "Usinagem", "Outros",
+].map((nome) => ({ nome, slug: slugify(nome) }));
+
+function slugify(str) {
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+function findDepartmentBySlug(slug) {
+  return DEPARTMENTS.find((d) => d.slug === slug);
+}
+
+// email sintético do Firebase Auth — usado tanto pro login pessoal de
+// cada usuário cadastrado quanto pra Logística.
+function loginEmail(slug) {
+  return `${slug}@stlogistica.app`;
+}
+
+function driverEmail(loginSlug) {
+  return `motorista-${loginSlug}@stlogistica.app`;
+}
+
+// O Firebase Auth exige senha com no mínimo 6 caracteres — mas o padrão
+// pedido para o sistema é "1234" (4 dígitos). Em vez de expor essa regra
+// pro usuário, todo login/criação de conta passa a senha "de vitrine" por
+// aqui, que a transforma numa senha real válida por baixo dos panos.
+function toAuthPassword(rawPassword) {
+  return `stlog-${rawPassword}`;
+}
+
+function describeAuthError(err) {
+  switch (err.code) {
+    case "auth/wrong-password":
+    case "auth/invalid-credential":
+    case "auth/internal-error":
+    case "auth/user-not-found":
+      return "Senha incorreta.";
+    case "auth/operation-not-allowed":
+      return "Login por e-mail/senha está desativado no Firebase. No Console → Authentication → Sign-in method, habilite “E-mail/senha”.";
+    case "auth/network-request-failed":
+      return "Falha de rede ao falar com o Firebase. Verifique sua internet ou se a rede corporativa bloqueia identitytoolkit.googleapis.com.";
+    case "auth/too-many-requests":
+      return "Muitas tentativas seguidas. Aguarde um momento e tente de novo.";
+    case "auth/user-disabled":
+      return "Essa conta foi desativada.";
+    case "auth/configuration-not-found":
+      return "Configuração do Firebase Auth não encontrada — confira o firebaseConfig do projeto.";
+    default:
+      return `Não foi possível entrar (${err.code || err.message || "erro desconhecido"}).`;
+  }
+}
+
+/* ---------------------------------------------------------------
+   AUTENTICAÇÃO — login por setor (Firebase Auth) + perfil (Firestore)
+
+   Estratégia: cada setor é um usuário do Firebase Auth com email
+   sintético `${slug}@stlogistica.app`. No primeiro acesso de um
+   setor válido com a senha padrão "1234", a conta é criada
+   automaticamente (não há backend/admin SDK nesta arquitetura
+   client-only). Acessos seguintes fazem apenas signIn normal.
+--------------------------------------------------------------- */
+const AuthContext = createContext(null);
+
+function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [firebaseFailed, setFirebaseFailed] = useState(false);
+
+  useEffect(() => {
+    let unsub = () => {};
+    const start = () => {
+      const { auth, onAuthStateChanged, doc, getDoc } = window.ST.firebase;
+      unsub = onAuthStateChanged(auth, async (fbUser) => {
+        setUser(fbUser);
+        if (fbUser) {
+          try {
+            const snap = await getDoc(doc(window.ST.firebase.db, "users", fbUser.uid));
+            if (snap.exists()) {
+              setProfile(snap.data());
+            } else if (fbUser.email === loginEmail("logistica")) {
+              // auto-cura: a conta raiz da Logística nunca pode ficar sem perfil válido
+              const { setDoc, serverTimestamp } = window.ST.firebase;
+              const freshProfile = {
+                role: "logistica",
+                nome: "Logística",
+                setorNome: "Logística",
+                mustChangePassword: false,
+                createdAt: serverTimestamp(),
+              };
+              await setDoc(doc(window.ST.firebase.db, "users", fbUser.uid), freshProfile);
+              setProfile(freshProfile);
+            } else {
+              setProfile(null);
+            }
+          } catch (err) {
+            console.error("Erro ao carregar perfil:", err);
+            setProfile(null);
+          }
+        } else {
+          setProfile(null);
+        }
+        setAuthLoading(false);
+      });
+    };
+    const onFail = () => {
+      setFirebaseFailed(true);
+      setAuthLoading(false);
+    };
+    if (window.ST && window.ST.firebase) start();
+    else {
+      window.addEventListener("st:firebase-ready", start, { once: true });
+      window.addEventListener("st:firebase-failed", onFail, { once: true });
+    }
+    // salvaguarda: se nenhum evento chegar em 10s (ex: CDN bloqueado
+    // silenciosamente pela rede), não deixa a tela presa carregando.
+    const timeout = setTimeout(() => {
+      if (!(window.ST && window.ST.firebase)) onFail();
+    }, 10000);
+    return () => {
+      unsub();
+      clearTimeout(timeout);
+    };
+  }, []);
+
+  if (firebaseFailed) {
+    return (
+      <div className="min-h-screen bg-ink flex items-center justify-center p-6">
+        <div className="max-w-sm text-center text-white">
+          <div className="w-12 h-12 rounded-2xl bg-brand flex items-center justify-center font-display font-bold mx-auto mb-4">!</div>
+          <p className="font-display font-semibold mb-2">Não foi possível conectar ao Firebase</p>
+          <p className="text-sm text-white/60">
+            Verifique sua conexão com a internet. Se estiver numa rede corporativa, os domínios
+            <span className="text-white/90"> gstatic.com </span> e <span className="text-white/90">googleapis.com</span> precisam estar liberados.
+          </p>
+          <Button variant="outline" size="sm" className="mt-4 bg-transparent text-white border-white/20 hover:border-white" onClick={() => window.location.reload()}>
+            Tentar novamente
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const authValue = { user, profile, authLoading, login: null, logout: null };
+  return <AuthProviderInner value={authValue}>{children}</AuthProviderInner>;
+}
+
+function AuthProviderInner({ value, children }) {
+  const { user, profile, authLoading } = value;
+
+  const login = useCallback(async (rawInput, senha) => {
+    const trimmed = rawInput.trim();
+    const slug = slugify(trimmed);
+    const { auth, signInWithEmailAndPassword, createUserWithEmailAndPassword, doc, getDoc, setDoc, serverTimestamp, db } = window.ST.firebase;
+
+    // LOGÍSTICA — único login com auto-provisionamento no primeiro acesso
+    // (é o login "raiz": não existe ninguém ainda pra cadastrá-lo). Também
+    // é auto-curável: se a conta existir no Auth mas o perfil tiver
+    // sumido do Firestore por algum motivo, recria o perfil sozinho.
+    if (slug === "logistica") {
+      const email = loginEmail(slug);
+      let uid = null;
+      try {
+        const cred = await signInWithEmailAndPassword(auth, email, toAuthPassword(senha));
+        uid = cred.user.uid;
+      } catch (err) {
+        if (senha !== "1234") {
+          throw new Error(describeAuthError(err));
+        }
+        try {
+          const cred = await createUserWithEmailAndPassword(auth, email, toAuthPassword(senha));
+          uid = cred.user.uid;
+        } catch (err2) {
+          if (err2.code === "auth/email-already-in-use") {
+            try {
+              const cred2 = await signInWithEmailAndPassword(auth, email, toAuthPassword(senha));
+              uid = cred2.user.uid;
+            } catch {
+              throw new Error("Senha incorreta.");
+            }
+          } else {
+            throw new Error(describeAuthError(err2));
+          }
+        }
+      }
+      if (uid) {
+        const snap = await getDoc(doc(db, "users", uid));
+        if (!snap.exists()) {
+          await setDoc(doc(db, "users", uid), {
+            role: "logistica",
+            nome: "Logística",
+            setorNome: "Logística",
+            mustChangePassword: false,
+            createdAt: serverTimestamp(),
+          });
+        }
+      }
+      return;
+    }
+
+    // USUÁRIO ou MOTORISTA — ambos logam pelo nome/login pessoal agora.
+    // Tenta primeiro como usuário comum; se a conta não existir com esse
+    // login, tenta como motorista (email tem prefixo interno diferente).
+    const CREDENTIAL_ERRORS = ["auth/user-not-found", "auth/wrong-password", "auth/invalid-credential", "auth/internal-error"];
+
+    try {
+      await signInWithEmailAndPassword(auth, loginEmail(slug), toAuthPassword(senha));
+      return;
+    } catch (errUsuario) {
+      if (!CREDENTIAL_ERRORS.includes(errUsuario.code)) {
+        throw new Error(describeAuthError(errUsuario));
+      }
+      try {
+        await signInWithEmailAndPassword(auth, driverEmail(slug), toAuthPassword(senha));
+        return;
+      } catch (errMotorista) {
+        if (!CREDENTIAL_ERRORS.includes(errMotorista.code)) {
+          throw new Error(describeAuthError(errMotorista));
+        }
+        throw new Error("Usuário não encontrado ou senha incorreta.");
+      }
+    }
+  }, []);
+
+
+  const logout = useCallback(async () => {
+    const { auth, signOut } = window.ST.firebase;
+    await signOut(auth);
+    navigate("/login");
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ user, profile, authLoading, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+function useAuth() {
+  return useContext(AuthContext);
+}
+
+/* ---------------------------------------------------------------
+   ÍCONES — wrapper para lucide (biblioteca vanilla, sem build)
+--------------------------------------------------------------- */
+function Icon({ name, className = "", size = 18, strokeWidth = 2 }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (ref.current && window.lucide) {
+      ref.current.innerHTML = "";
+      const svgStr = window.lucide.icons[toPascal(name)];
+    }
+  }, [name]);
+
+  // lucide UMD expõe createIcons() global; usamos <i data-lucide> + createIcons()
+  return <i data-lucide={name} className={className} style={{ width: size, height: size, strokeWidth }}></i>;
+}
+function toPascal(str) {
+  return str.split("-").map((s) => s[0].toUpperCase() + s.slice(1)).join("");
+}
+function refreshIcons() {
+  if (window.lucide) window.lucide.createIcons();
+}
+
+/* ---------------------------------------------------------------
+   TOASTS — sistema global de notificações
+--------------------------------------------------------------- */
+const ToastContext = createContext(null);
+
+function ToastProvider({ children }) {
+  const [toasts, setToasts] = useState([]);
+
+  const push = useCallback((toast) => {
+    const id = Math.random().toString(36).slice(2);
+    setToasts((t) => [...t, { id, type: "info", ...toast }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), toast.duration || 4000);
+  }, []);
+
+  const dismiss = (id) => setToasts((t) => t.filter((x) => x.id !== id));
+
+  return (
+    <ToastContext.Provider value={{ push }}>
+      {children}
+      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 w-[320px] max-w-[calc(100vw-2rem)]">
+        {toasts.map((t) => (
+          <div
+            key={t.id}
+            onClick={() => dismiss(t.id)}
+            className={
+              "cursor-pointer animate-toastIn rounded-2xl shadow-lift px-4 py-3 flex items-start gap-3 border " +
+              (t.type === "error"
+                ? "bg-ink text-white border-brand/40"
+                : t.type === "success"
+                ? "bg-ink text-white border-white/10"
+                : "bg-ink text-white border-white/10")
+            }
+          >
+            <div className={"mt-0.5 w-2 h-2 rounded-full shrink-0 " + (t.type === "error" ? "bg-brand" : t.type === "success" ? "bg-emerald-400" : "bg-white")} />
+            <div className="flex-1 min-w-0">
+              {t.title && <p className="text-sm font-semibold leading-tight">{t.title}</p>}
+              {t.message && <p className="text-xs text-white/70 mt-0.5 leading-snug">{t.message}</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </ToastContext.Provider>
+  );
+}
+function useToast() {
+  return useContext(ToastContext);
+}
+
+/* ---------------------------------------------------------------
+   COMPONENTES BASE — Button, Card, Input, Badge, ProgressBar…
+--------------------------------------------------------------- */
+function Button({ variant = "primary", size = "md", className = "", icon, children, ...props }) {
+  const base = "inline-flex items-center justify-center gap-2 font-medium rounded-xl transition-all duration-150 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none";
+  const sizes = { sm: "text-xs px-3 py-1.5", md: "text-sm px-4 py-2.5", lg: "text-sm px-5 py-3" };
+  const variants = {
+    primary: "bg-ink text-white hover:bg-brand shadow-soft",
+    brand: "bg-brand text-white hover:bg-brand-dark shadow-soft",
+    ghost: "bg-transparent text-ink hover:bg-mist",
+    outline: "bg-white text-ink border border-line hover:border-ink",
+    subtle: "bg-mist text-ink hover:bg-line",
+  };
+  return (
+    <button className={`${base} ${sizes[size]} ${variants[variant]} ${className}`} {...props}>
+      {icon && <Icon name={icon} size={16} />}
+      {children}
+    </button>
+  );
+}
+
+function Card({ className = "", children, ...props }) {
+  return (
+    <div className={`bg-white rounded-2xl border border-line shadow-soft ${className}`} {...props}>
+      {children}
+    </div>
+  );
+}
+
+function Input({ label, error, icon, className = "", ...props }) {
+  return (
+    <label className="block">
+      {label && <span className="block text-xs font-medium text-muted mb-1.5">{label}</span>}
+      <div className="relative">
+        {icon && (
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted">
+            <Icon name={icon} size={16} />
+          </span>
+        )}
+        <input
+          className={`w-full rounded-xl border bg-white text-sm px-3.5 py-2.5 ${icon ? "pl-9" : ""} ${
+            error ? "border-brand" : "border-line"
+          } focus:border-ink outline-none transition-colors placeholder:text-muted/70 ${className}`}
+          {...props}
+        />
+      </div>
+      {error && <span className="block text-[11px] text-brand mt-1">{error}</span>}
+    </label>
+  );
+}
+
+const STATUS_MAP = {
+  solicitacao: { label: "Solicitação", color: "bg-zinc-200 text-zinc-700", dot: "bg-zinc-500" },
+  programada: { label: "Programada", color: "bg-amber-100 text-amber-800", dot: "bg-amber-500" },
+  em_rota: { label: "Em Rota", color: "bg-blue-100 text-blue-800", dot: "bg-blue-500" },
+  finalizada: { label: "Finalizada", color: "bg-emerald-100 text-emerald-800", dot: "bg-emerald-500" },
+};
+
+function StatusBadge({ status }) {
+  const s = STATUS_MAP[status] || STATUS_MAP.solicitacao;
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full ${s.color}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+      {s.label}
+    </span>
+  );
+}
+
+const PRIORITY_MAP = {
+  emergencial: { label: "Emergencial", color: "text-brand", bg: "bg-brand/10" },
+  alta: { label: "Alta", color: "text-orange-600", bg: "bg-orange-50" },
+  media: { label: "Média", color: "text-amber-600", bg: "bg-amber-50" },
+  baixa: { label: "Baixa", color: "text-zinc-600", bg: "bg-zinc-100" },
+};
+function PriorityTag({ level }) {
+  const p = PRIORITY_MAP[level] || PRIORITY_MAP.media;
+  return <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${p.color} ${p.bg}`}>{p.label}</span>;
+}
+
+/* Elemento-assinatura da identidade visual: a "linha de rota" —
+   uma barra de progresso pontilhada, como uma estrada, com um
+   marcador (caminhão/ponto) avançando conforme o status da ST.
+   1=Criada 2=Programada(ou "Reprogramar" se precisaReagendar) 3=Em Rota 4=Concluída */
+const FLOW_STEPS = ["solicitacao", "programada", "em_rota", "finalizada"];
+function RouteProgress({ status = "solicitacao", compact = false, precisaReagendar = false }) {
+  const idx = FLOW_STEPS.indexOf(status);
+  return (
+    <div className="w-full">
+      <div className="relative flex items-center">
+        <div className="absolute left-0 right-0 h-[3px] bg-line rounded-full" style={{ backgroundImage: "repeating-linear-gradient(90deg, #E7E7E9 0 6px, transparent 6px 12px)" }} />
+        <div
+          className="absolute left-0 h-[3px] bg-ink rounded-full transition-all duration-700 ease-out"
+          style={{ width: `${(idx / (FLOW_STEPS.length - 1)) * 100}%` }}
+        />
+        {FLOW_STEPS.map((step, i) => {
+          const reached = i <= idx;
+          const current = i === idx;
+          const isReprogramStep = i === 1 && precisaReagendar;
+          return (
+            <div key={step} className="relative z-10 flex-1 flex justify-center first:justify-start last:justify-end">
+              <div
+                className={`rounded-full flex items-center justify-center transition-all duration-300 ${
+                  isReprogramStep ? "bg-brand" : reached ? "bg-ink" : "bg-white border-2 border-line"
+                } ${current || isReprogramStep ? "ring-4 ring-brand/15" : ""}`}
+                style={{ width: compact ? 10 : 14, height: compact ? 10 : 14 }}
+              >
+                {(current || isReprogramStep) && step !== "finalizada" && <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulseDot" />}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {!compact && (
+        <div className="flex justify-between mt-2 text-[10px] font-medium text-muted uppercase tracking-wide">
+          <span className={idx >= 0 ? "text-ink" : ""}>Solicitação</span>
+          <span className={precisaReagendar ? "text-brand" : idx >= 1 ? "text-ink" : ""}>{precisaReagendar ? "Reprogramar" : "Programada"}</span>
+          <span className={idx >= 2 ? "text-ink" : ""}>Em Rota</span>
+          <span className={idx >= 3 ? "text-ink" : ""}>Concluída</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Skeleton({ className = "" }) {
+  return <div className={`skeleton rounded-lg ${className}`} />;
+}
+
+function InstallPWAButton() {
+  const [deferred, setDeferred] = useState(null);
+  useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault();
+      setDeferred(e);
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+  if (!deferred) return null;
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      icon="download"
+      onClick={async () => {
+        deferred.prompt();
+        await deferred.userChoice;
+        setDeferred(null);
+      }}
+    >
+      Instalar app
+    </Button>
+  );
+}
+
+/* ---------------------------------------------------------------
+   PÁGINA: LOGIN (visual completo — autenticação real vem na Parte 2)
+--------------------------------------------------------------- */
+function LoginPage() {
+  const [setor, setSetor] = useState("");
+  const [senha, setSenha] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const toast = useToast();
+  const auth = useAuth();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (!setor.trim() || !senha.trim()) {
+      setError("Preencha setor e senha.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await auth.login(setor, senha);
+      toast.push({ type: "success", title: "Bem-vindo!", message: "Login realizado com sucesso." });
+      navigate("/dashboard");
+    } catch (err) {
+      setError(err.message || "Não foi possível entrar.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-ink flex items-center justify-center p-4 relative overflow-hidden">
+      {/* linha de rota decorativa de fundo */}
+      <div className="absolute inset-0 opacity-[0.06] pointer-events-none" style={{
+        backgroundImage: "repeating-linear-gradient(115deg, #fff 0 2px, transparent 2px 26px)"
+      }} />
+
+      <div className="w-full max-w-sm animate-fadeUp relative">
+        <div className="flex flex-col items-center mb-8">
+          <div className="w-14 h-14 rounded-2xl bg-brand flex items-center justify-center font-display font-bold text-white text-xl shadow-lift mb-4">
+            ST
+          </div>
+          <h1 className="font-display text-white text-xl font-semibold tracking-tight">ST Logística</h1>
+          <p className="text-white/50 text-sm mt-1">Controle de Solicitações de Transporte</p>
+        </div>
+
+        <Card className="bg-white p-6">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <Input
+              label="Usuário"
+              icon="user"
+              placeholder="seu usuário"
+              value={setor}
+              onChange={(e) => setSetor(e.target.value)}
+              autoComplete="username"
+            />
+            <Input
+              label="Senha"
+              icon="lock"
+              type="password"
+              placeholder="••••"
+              value={senha}
+              onChange={(e) => setSenha(e.target.value)}
+              autoComplete="current-password"
+            />
+            {error && (
+              <p className="text-xs text-brand bg-brand-soft rounded-lg px-3 py-2 -mt-1">{error}</p>
+            )}
+            <Button type="submit" variant="brand" className="w-full mt-1" disabled={loading}>
+              {loading ? "Entrando..." : "Entrar"}
+            </Button>
+          </form>
+        </Card>
+
+        <p className="text-center text-white/30 text-xs mt-6">
+          Seu login é cadastrado pela Logística · senha inicial <span className="text-white/50 st-number">1234</span>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------
+   SHELL: Sidebar + Topbar (estrutura para os dashboards futuros)
+--------------------------------------------------------------- */
+const SETOR_MENU = [
+  { icon: "layout-dashboard", label: "Dashboard", path: "/dashboard" },
+  { icon: "plus-circle", label: "Nova ST", path: "/nova-st" },
+  { icon: "list-checks", label: "Minhas STs", path: "/minhas-sts" },
+  { icon: "truck", label: "Acompanhar Motoristas", path: "/motoristas" },
+  { icon: "bell", label: "Notificações", path: "/notificacoes" },
+  { icon: "user-circle", label: "Perfil", path: "/perfil" },
+];
+
+const LOGISTICA_MENU = [
+  { icon: "layout-dashboard", label: "Dashboard", path: "/dashboard" },
+  { icon: "list-checks", label: "Todas STs", path: "/todas-sts" },
+  { icon: "calendar-clock", label: "Programação", path: "/programacao" },
+  { icon: "users", label: "Motoristas", path: "/gestao-motoristas" },
+  { icon: "car", label: "Veículos", path: "/veiculos" },
+  { icon: "route", label: "Planejamento de Rotas", path: "/rotas" },
+  { icon: "database", label: "Cadastros", path: "/cadastros" },
+  { icon: "file-bar-chart", label: "Relatórios", path: "/relatorios" },
+  { icon: "settings", label: "Configurações", path: "/configuracoes" },
+  { icon: "bell", label: "Notificações", path: "/notificacoes" },
+];
+
+// Motorista: acesso restrito só às próprias STs — nada de administração.
+const MOTORISTA_MENU = [
+  { icon: "list-checks", label: "Minhas STs", path: "/dashboard" },
+  { icon: "user-circle", label: "Perfil", path: "/perfil" },
+];
+
+function Sidebar({ items, sectorName = "Setor", subLabel = "Sair" }) {
+  const router = useRouter();
+  const auth = useAuth();
+  return (
+    <aside className="w-64 shrink-0 bg-ink text-white h-screen sticky top-0 flex flex-col">
+      <div className="flex items-center gap-2.5 px-5 h-16 border-b border-white/10">
+        <div className="w-8 h-8 rounded-lg bg-brand flex items-center justify-center font-display font-bold text-sm">ST</div>
+        <span className="font-display font-semibold text-sm tracking-tight">ST Logística</span>
+      </div>
+
+      <nav className="flex-1 px-3 py-4 flex flex-col gap-1 overflow-y-auto">
+        {items.map((item) => {
+          const active = router.path === item.path;
+          return (
+            <button
+              key={item.path}
+              onClick={() => navigate(item.path)}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-left ${
+                active ? "bg-white text-ink" : "text-white/70 hover:bg-white/10 hover:text-white"
+              }`}
+            >
+              <Icon name={item.icon} size={17} />
+              {item.label}
+            </button>
+          );
+        })}
+      </nav>
+
+      <div className="p-3 border-t border-white/10">
+        <button
+          onClick={() => auth.logout()}
+          className="w-full flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-white/10 cursor-pointer transition-colors text-left"
+        >
+          <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-xs font-semibold shrink-0">
+            {sectorName.slice(0, 2).toUpperCase()}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium truncate">{sectorName}</p>
+            <p className="text-[11px] text-white/40 truncate">{subLabel}</p>
+          </div>
+          <Icon name="log-out" size={15} className="text-white/40 shrink-0" />
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+function Topbar({ title, subtitle }) {
+  const { profile } = useAuth();
+  const isLogistica = profile?.role === "logistica";
+  const isMotorista = profile?.role === "motorista";
+  const targetType = isMotorista ? null : isLogistica ? "role" : "setor";
+  const targetValue = isMotorista ? null : isLogistica ? "logistica" : profile?.setorSlug;
+  const { data: notifs } = useNotifications(targetType, targetValue);
+  const unread = notifs.filter((n) => !n.lida).length;
+
+  return (
+    <header className="h-16 sticky top-0 z-20 bg-white/80 backdrop-blur border-b border-line flex items-center justify-between px-6">
+      <div>
+        <h1 className="font-display text-base font-semibold text-ink leading-tight">{title}</h1>
+        {subtitle && <p className="text-xs text-muted">{subtitle}</p>}
+      </div>
+      <div className="flex items-center gap-3">
+        <InstallPWAButton />
+        <button
+          onClick={() => !isMotorista && navigate("/notificacoes")}
+          className="relative w-9 h-9 rounded-xl bg-mist hover:bg-line flex items-center justify-center transition-colors"
+        >
+          <Icon name="bell" size={16} />
+          {unread > 0 && <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-brand" />}
+        </button>
+      </div>
+    </header>
+  );
+}
+
+/* ---------------------------------------------------------------
+   PÁGINA: DASHBOARD (placeholder visual — dados reais na Parte 5/6)
+--------------------------------------------------------------- */
+function StatCard({ icon, label, value, loading }) {
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between mb-3">
+        <div className="w-9 h-9 rounded-xl bg-mist flex items-center justify-center">
+          <Icon name={icon} size={16} />
+        </div>
+      </div>
+      {loading ? (
+        <Skeleton className="h-7 w-16 mb-1" />
+      ) : (
+        <p className="font-display text-2xl font-semibold text-ink st-number">{value}</p>
+      )}
+      <p className="text-xs text-muted mt-1">{label}</p>
+    </Card>
+  );
+}
+
+function CityBar({ cidade, count, max }) {
+  const pct = max ? Math.round((count / max) * 100) : 0;
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-xs text-ink w-28 truncate">{cidade}</span>
+      <div className="flex-1 h-2 rounded-full bg-mist overflow-hidden">
+        <div className="h-full bg-ink rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-xs text-muted st-number w-6 text-right">{count}</span>
+    </div>
+  );
+}
+
+function SetorDashboardPage() {
+  const { user, profile } = useAuth();
+  const { data: sts, loading } = useSTsWhere("criadoPorUid", user?.uid);
+
+  const counts = {
+    total: sts.length,
+    programada: sts.filter((s) => s.status === "programada").length,
+    em_rota: sts.filter((s) => s.status === "em_rota").length,
+    finalizada: sts.filter((s) => s.status === "finalizada").length,
+    solicitacao: sts.filter((s) => s.status === "solicitacao").length,
+  };
+  const recentes = sts.slice(0, 5);
+
+  const cityCounts = {};
+  sts.forEach((s) => { if (s.cidade) cityCounts[s.cidade] = (cityCounts[s.cidade] || 0) + 1; });
+  const topCities = Object.entries(cityCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const maxCity = topCities.length ? topCities[0][1] : 0;
+
+  return (
+    <div className="flex-1 min-h-screen bg-mist">
+      <Topbar title="Dashboard" subtitle={`Visão geral de ${profile.nome || profile.setorNome} · ${profile.setorNome}`} />
+      <div className="p-6 flex flex-col gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <StatCard icon="inbox" label="Total de STs" value={counts.total} loading={loading} />
+          <StatCard icon="calendar-clock" label="Programadas" value={counts.programada} loading={loading} />
+          <StatCard icon="truck" label="Em Rota" value={counts.em_rota} loading={loading} />
+          <StatCard icon="check-circle-2" label="Finalizadas" value={counts.finalizada} loading={loading} />
+        </div>
+
+        {!loading && counts.solicitacao > 0 && (
+          <Card className="p-4 border border-brand/30 bg-brand-soft flex items-center gap-3">
+            <Icon name="bell" size={16} className="text-brand shrink-0" />
+            <p className="text-sm text-ink">
+              Você tem <span className="font-semibold">{counts.solicitacao}</span> ST(s) aguardando programação pela Logística.
+            </p>
+          </Card>
+        )}
+
+        <div className="grid md:grid-cols-3 gap-6">
+          <Card className="p-5 md:col-span-2">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display font-semibold text-sm">Últimas STs</h2>
+              <Button variant="ghost" size="sm" icon="plus" onClick={() => navigate("/nova-st")}>Nova ST</Button>
+            </div>
+            {loading ? (
+              <div className="flex flex-col gap-3">
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-14 w-full" />
+              </div>
+            ) : recentes.length === 0 ? (
+              <EmptyState icon="inbox" title="Nenhuma ST ainda" subtitle="Crie sua primeira solicitação de transporte." />
+            ) : (
+              <div className="flex flex-col divide-y divide-line">
+                {recentes.map((st) => (
+                  <div key={st.id} className="py-4 first:pt-0 last:pb-0 flex items-center gap-4">
+                    <div className="w-24 shrink-0">
+                      <p className="text-sm font-semibold st-number">{st.numero}</p>
+                      <PriorityTag level={st.prioridade} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-ink truncate">{st.fornecedorDestino}</p>
+                      <div className="mt-2 max-w-xs">
+                        <RouteProgress status={st.status} compact />
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <StatusBadge status={st.status} />
+                      {st.motoristaNome && <p className="text-[11px] text-muted mt-1">{st.motoristaNome}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          <Card className="p-5">
+            <h2 className="font-display font-semibold text-sm mb-4">Resumo por cidade</h2>
+            {loading ? (
+              <Skeleton className="h-32 w-full" />
+            ) : topCities.length === 0 ? (
+              <p className="text-xs text-muted">Sem dados suficientes ainda.</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {topCities.map(([cidade, count]) => (
+                  <CityBar key={cidade} cidade={cidade} count={count} max={maxCity} />
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LogisticaDashboardPage() {
+  const { data: sts, loading: loadingSTs } = useAllSTs();
+  const { data: drivers, loading: loadingDrivers } = useCollection("drivers", "nome");
+  const { data: vehicles, loading: loadingVehicles } = useCollection("vehicles", "modelo");
+  const loading = loadingSTs || loadingDrivers || loadingVehicles;
+
+  const counts = {
+    solicitacao: sts.filter((s) => s.status === "solicitacao").length,
+    programada: sts.filter((s) => s.status === "programada").length,
+    em_rota: sts.filter((s) => s.status === "em_rota").length,
+    finalizada: sts.filter((s) => s.status === "finalizada").length,
+    urgentes: sts.filter((s) => s.prioridade === "emergencial" && s.status !== "finalizada").length,
+    reagendar: sts.filter((s) => s.precisaReagendar).length,
+  };
+  const motoristasDisponiveis = drivers.filter((d) => d.status === "disponivel").length;
+  const motoristasEmRota = drivers.filter((d) => d.status === "em_rota").length;
+  const veiculosDisponiveis = vehicles.filter((v) => v.status === "disponivel").length;
+  const veiculosEmRota = vehicles.filter((v) => v.status === "em_rota").length;
+
+  const alertas = sts
+    .filter((s) => s.precisaReagendar || (s.prioridade === "emergencial" && s.status !== "finalizada"))
+    .sort((a, b) => (b.numero || "").localeCompare(a.numero || ""));
+
+  const recentes = sts.slice(0, 6);
+
+  const cityCounts = {};
+  sts.filter((s) => s.status === "programada" || s.status === "em_rota").forEach((s) => {
+    if (s.cidade) cityCounts[s.cidade] = (cityCounts[s.cidade] || 0) + 1;
+  });
+  const topCities = Object.entries(cityCounts).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const maxCity = topCities.length ? topCities[0][1] : 0;
+
+  return (
+    <div className="flex-1 min-h-screen bg-mist">
+      <Topbar title="Dashboard" subtitle="Visão geral da Logística" />
+      <div className="p-6 flex flex-col gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <StatCard icon="inbox" label="Solicitações" value={counts.solicitacao} loading={loading} />
+          <StatCard icon="calendar-clock" label="Programadas" value={counts.programada} loading={loading} />
+          <StatCard icon="truck" label="Em Rota" value={counts.em_rota} loading={loading} />
+          <StatCard icon="check-circle-2" label="Finalizadas" value={counts.finalizada} loading={loading} />
+          <StatCard icon="siren" label="Urgentes" value={counts.urgentes} loading={loading} />
+          <StatCard icon="calendar-x" label="Aguardando Reagendar" value={counts.reagendar} loading={loading} />
+          <StatCard icon="user-check" label="Motoristas Disponíveis" value={motoristasDisponiveis} loading={loading} />
+          <StatCard icon="navigation" label="Motoristas Em Rota" value={motoristasEmRota} loading={loading} />
+          <StatCard icon="car" label="Veículos Disponíveis" value={veiculosDisponiveis} loading={loading} />
+          <StatCard icon="car-front" label="Veículos Em Rota" value={veiculosEmRota} loading={loading} />
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-6">
+          <Card className="p-5">
+            <h2 className="font-display font-semibold text-sm mb-4 flex items-center gap-2">
+              <Icon name="alert-triangle" size={15} className="text-brand" /> Alertas
+            </h2>
+            {loading ? (
+              <Skeleton className="h-24 w-full" />
+            ) : alertas.length === 0 ? (
+              <p className="text-xs text-muted">Nenhum alerta em aberto.</p>
+            ) : (
+              <div className="flex flex-col divide-y divide-line">
+                {alertas.map((st) => (
+                  <div key={st.id} className="py-3 first:pt-0 last:pb-0 flex items-center gap-3">
+                    {st.precisaReagendar && <Icon name="calendar-x" size={14} className="text-brand shrink-0" />}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold st-number">{st.numero}</p>
+                      <p className="text-xs text-muted truncate">
+                        {st.setorNome} · {st.fornecedorDestino}
+                        {st.precisaReagendar && <span className="text-brand"> — precisa reagendar</span>}
+                      </p>
+                    </div>
+                    <StatusBadge status={st.status} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          <Card className="p-5">
+            <h2 className="font-display font-semibold text-sm mb-4">Rotas ativas por cidade</h2>
+            {loading ? (
+              <Skeleton className="h-24 w-full" />
+            ) : topCities.length === 0 ? (
+              <p className="text-xs text-muted">Nenhuma rota programada ou em andamento agora.</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {topCities.map(([cidade, count]) => <CityBar key={cidade} cidade={cidade} count={count} max={maxCity} />)}
+              </div>
+            )}
+          </Card>
+        </div>
+
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-display font-semibold text-sm">Últimas STs</h2>
+            <Button variant="ghost" size="sm" icon="arrow-right" onClick={() => navigate("/todas-sts")}>Ver todas</Button>
+          </div>
+          {loading ? (
+            <div className="flex flex-col gap-3"><Skeleton className="h-14 w-full" /><Skeleton className="h-14 w-full" /></div>
+          ) : recentes.length === 0 ? (
+            <EmptyState icon="inbox" title="Nenhuma ST criada ainda" />
+          ) : (
+            <div className="flex flex-col divide-y divide-line">
+              {recentes.map((st) => (
+                <div key={st.id} className="py-4 first:pt-0 last:pb-0 flex items-center gap-4">
+                  <div className="w-24 shrink-0">
+                    <p className="text-sm font-semibold st-number">{st.numero}</p>
+                    <PriorityTag level={st.prioridade} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-ink truncate">{st.setorNome} · {st.fornecedorDestino}</p>
+                    <div className="mt-2 max-w-xs">
+                      <RouteProgress status={st.status} compact />
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <StatusBadge status={st.status} />
+                    {st.motoristaNome && <p className="text-[11px] text-muted mt-1">{st.motoristaNome}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function PlaceholderPage({ title }) {
+  return (
+    <div className="flex-1 min-h-screen bg-mist">
+      <Topbar title={title} />
+      <div className="p-6">
+        <Card className="p-10 flex flex-col items-center justify-center text-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-mist flex items-center justify-center">
+            <Icon name="hammer" size={20} className="text-muted" />
+          </div>
+          <p className="font-display font-semibold text-sm">Em construção</p>
+          <p className="text-xs text-muted max-w-xs">Esta tela será implementada nas próximas partes do projeto.</p>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------
+   PERFIL, PROGRAMAÇÃO, ACOMPANHAR MOTORISTAS, CONFIGURAÇÕES
+--------------------------------------------------------------- */
+function ChangePasswordCard() {
+  const { user, profile } = useAuth();
+  const [senhaAtual, setSenhaAtual] = useState("");
+  const [novaSenha, setNovaSenha] = useState("");
+  const [confirmarSenha, setConfirmarSenha] = useState("");
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (novaSenha.length < 4) {
+      toast.push({ type: "error", title: "Senha muito curta", message: "Use pelo menos 4 caracteres." });
+      return;
+    }
+    if (novaSenha !== confirmarSenha) {
+      toast.push({ type: "error", title: "As senhas não coincidem" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const { auth, signInWithEmailAndPassword, updatePassword, doc, updateDoc, db } = window.ST.firebase;
+      // reautentica com a senha atual antes de trocar (o Firebase exige isso pra operações sensíveis)
+      await signInWithEmailAndPassword(auth, user.email, toAuthPassword(senhaAtual));
+      await updatePassword(auth.currentUser, toAuthPassword(novaSenha));
+      await updateDoc(doc(db, "users", user.uid), { mustChangePassword: false });
+      toast.push({ type: "success", title: "Senha alterada com sucesso" });
+      setSenhaAtual("");
+      setNovaSenha("");
+      setConfirmarSenha("");
+    } catch (err) {
+      toast.push({
+        type: "error",
+        title: "Erro ao trocar senha",
+        message: ["auth/wrong-password", "auth/internal-error", "auth/invalid-credential"].includes(err.code) ? "Senha atual incorreta." : err.message,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card className="p-5">
+      <h2 className="font-display font-semibold text-sm mb-4">Alterar senha</h2>
+      <form onSubmit={handleChangePassword} className="flex flex-col gap-3">
+        <Input label="Senha atual" type="password" value={senhaAtual} onChange={(e) => setSenhaAtual(e.target.value)} />
+        <Input label="Nova senha" type="password" value={novaSenha} onChange={(e) => setNovaSenha(e.target.value)} />
+        <Input label="Confirmar nova senha" type="password" value={confirmarSenha} onChange={(e) => setConfirmarSenha(e.target.value)} />
+        <Button type="submit" variant="brand" className="mt-1" disabled={saving}>
+          {saving ? "Salvando..." : "Salvar nova senha"}
+        </Button>
+      </form>
+    </Card>
+  );
+}
+
+function ProfilePage() {
+  const { profile } = useAuth();
+  const isMotorista = profile.role === "motorista";
+  const isLogistica = profile.role === "logistica";
+
+  return (
+    <div className="flex-1 min-h-screen bg-mist">
+      <Topbar title="Perfil" subtitle="Seus dados e senha de acesso" />
+      <div className="p-6 max-w-lg flex flex-col gap-6">
+        <Card className="p-5 flex flex-col gap-3">
+          <h2 className="font-display font-semibold text-sm">Meus dados</h2>
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-mist flex items-center justify-center font-display font-semibold">
+              {(profile.nome || "?").slice(0, 2).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-medium truncate">{profile.nome}</p>
+              <p className="text-xs text-muted">{isLogistica ? "Logística" : isMotorista ? "Motorista" : profile.setorNome}</p>
+            </div>
+          </div>
+          {profile.login && <p className="text-xs text-muted">Login: <span className="st-number">{profile.login}</span></p>}
+          {isMotorista && profile.telefone && <p className="text-xs text-muted">Telefone: {profile.telefone}</p>}
+        </Card>
+        <ChangePasswordCard />
+      </div>
+    </div>
+  );
+}
+
+function SettingsPage() {
+  return (
+    <div className="flex-1 min-h-screen bg-mist">
+      <Topbar title="Configurações" subtitle="Sua conta e informações do sistema" />
+      <div className="p-6 max-w-lg flex flex-col gap-6">
+        <ChangePasswordCard />
+        <Card className="p-5 flex flex-col gap-2">
+          <h2 className="font-display font-semibold text-sm mb-1">Sobre o sistema</h2>
+          <div className="text-xs text-muted flex flex-col gap-1">
+            <p>ST Logística — Controle de Solicitações de Transporte</p>
+            <p>Projeto Firebase: <span className="st-number">sofir-logistics</span></p>
+            <p>Para gerenciar usuários, motoristas e veículos, use <span className="text-ink">Cadastros</span>.</p>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function AcompanharMotoristasPage() {
+  const { user } = useAuth();
+  const { data: sts, loading: loadingSTs } = useSTsWhere("criadoPorUid", user?.uid);
+  const { data: drivers, loading: loadingDrivers } = useCollection("drivers", "nome");
+  const loading = loadingSTs || loadingDrivers;
+
+  const activeSTs = sts.filter((s) => s.motoristaId && s.status !== "finalizada");
+  const driverIds = new Set(activeSTs.map((s) => s.motoristaId));
+  const relevantDrivers = drivers.filter((d) => driverIds.has(d.id));
+
+  return (
+    <div className="flex-1 min-h-screen bg-mist">
+      <Topbar title="Acompanhar Motoristas" subtitle="Motoristas com STs suas em andamento" />
+      <div className="p-6">
+        {loading ? (
+          <div className="grid md:grid-cols-2 gap-4"><Skeleton className="h-40" /><Skeleton className="h-40" /></div>
+        ) : relevantDrivers.length === 0 ? (
+          <Card className="p-10">
+            <EmptyState icon="truck" title="Nenhum motorista em rota pra você agora" subtitle="Assim que uma das suas STs for atribuída a um motorista, ele aparece aqui." />
+          </Card>
+        ) : (
+          <div className="grid md:grid-cols-2 gap-4">
+            {relevantDrivers.map((d) => {
+              const driverSTs = activeSTs.filter((s) => s.motoristaId === d.id);
+              return (
+                <Card key={d.id} className="p-4 flex flex-col gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-mist flex items-center justify-center text-xs font-semibold shrink-0">
+                      {d.nome.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{d.nome}</p>
+                      <p className="text-xs text-muted">{d.telefone}</p>
+                    </div>
+                    <SimpleStatusBadge status={d.status} map={DRIVER_STATUS_MAP} />
+                  </div>
+                  <DriverLocationBadge driver={d} />
+                  <div className="flex flex-col gap-2 pt-2 border-t border-line">
+                    {driverSTs.map((s) => (
+                      <div key={s.id} className="flex items-center justify-between text-xs gap-2">
+                        <span className="st-number font-medium">{s.numero}</span>
+                        <span className="text-muted truncate flex-1">{s.fornecedorDestino}</span>
+                        <StatusBadge status={s.status} />
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProgramacaoPage() {
+  const { data: sts, loading } = useAllSTs();
+  const { data: drivers } = useCollection("drivers", "nome");
+  const [managing, setManaging] = useState(null);
+  const toast = useToast();
+
+  const pendentes = sortQueue(sts.filter((s) => s.status === "solicitacao"));
+
+  const saveAssignment = async (st, motoristaId, status, dataDesejada, horario) => {
+    try {
+      await applySTAssignment(st, motoristaId, status, dataDesejada, horario, drivers);
+      toast.push({ type: "success", title: "ST programada" });
+      setManaging(null);
+    } catch (err) {
+      toast.push({ type: "error", title: "Erro ao programar", message: err.message });
+    }
+  };
+
+  return (
+    <div className="flex-1 min-h-screen bg-mist">
+      <Topbar title="Programação" subtitle="Solicitações aguardando programação, por prioridade" />
+      <div className="p-6">
+        {loading ? (
+          <div className="grid md:grid-cols-2 gap-4"><Skeleton className="h-40" /><Skeleton className="h-40" /></div>
+        ) : pendentes.length === 0 ? (
+          <Card className="p-10"><EmptyState icon="calendar-check" title="Tudo programado!" subtitle="Não há solicitações pendentes no momento." /></Card>
+        ) : (
+          <div className="grid md:grid-cols-2 gap-4">
+            {pendentes.map((st) => (
+              <STCard key={st.id} st={st} highlightNew>
+                <p className="text-xs text-muted truncate">{st.setorNome} · {st.solicitanteNome}</p>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  <Button variant="outline" size="sm" icon="map" onClick={() => openRouteInMaps(st)}>Abrir rota</Button>
+                  <Button variant="brand" size="sm" icon="calendar-check" onClick={() => setManaging(st)}>Programar</Button>
+                </div>
+              </STCard>
+            ))}
+          </div>
+        )}
+      </div>
+      <Modal open={!!managing} onClose={() => setManaging(null)} title={managing ? `Programar ${managing.numero}` : ""}>
+        {managing && <ManageSTForm st={managing} drivers={drivers} onSave={saveAssignment} onCancel={() => setManaging(null)} />}
+      </Modal>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------
+   FIRESTORE HELPERS — CRUD genérico + hook de coleção em tempo real
+--------------------------------------------------------------- */
+function useCollection(name, orderField) {
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let unsub = () => {};
+    const start = () => {
+      const { db, collection, onSnapshot, query, orderBy } = window.ST.firebase;
+      const q = orderField ? query(collection(db, name), orderBy(orderField)) : collection(db, name);
+      unsub = onSnapshot(
+        q,
+        (snap) => {
+          setData(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+          setLoading(false);
+        },
+        (err) => {
+          console.error(`Erro ao ler ${name}:`, err);
+          setLoading(false);
+        }
+      );
+    };
+    if (window.ST && window.ST.firebase) start();
+    else window.addEventListener("st:firebase-ready", start, { once: true });
+    return () => unsub();
+  }, [name, orderField]);
+
+  return { data, loading };
+}
+
+async function createDoc(collectionName, data) {
+  const { db, collection, addDoc, serverTimestamp } = window.ST.firebase;
+  return addDoc(collection(db, collectionName), { ...data, createdAt: serverTimestamp() });
+}
+async function updateDocById(collectionName, id, data) {
+  const { db, doc, updateDoc, serverTimestamp } = window.ST.firebase;
+  return updateDoc(doc(db, collectionName, id), { ...data, updatedAt: serverTimestamp() });
+}
+async function deleteDocById(collectionName, id) {
+  const { db, doc, deleteDoc } = window.ST.firebase;
+  return deleteDoc(doc(db, collectionName, id));
+}
+
+/* ---------------------------------------------------------------
+   UI — Modal, Select, Tabs (componentes de suporte aos cadastros)
+--------------------------------------------------------------- */
+function Modal({ open, onClose, title, children, footer, maxWidth = "max-w-md" }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-ink/50 backdrop-blur-sm" onClick={onClose} />
+      <div className={`relative bg-white rounded-2xl shadow-lift w-full ${maxWidth} animate-fadeUp overflow-hidden max-h-[90vh] flex flex-col`}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-line shrink-0">
+          <h3 className="font-display font-semibold text-sm">{title}</h3>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-mist flex items-center justify-center transition-colors">
+            <Icon name="x" size={16} />
+          </button>
+        </div>
+        <div className="p-5 overflow-y-auto">{children}</div>
+        {footer && <div className="px-5 py-4 border-t border-line flex justify-end gap-2 shrink-0">{footer}</div>}
+      </div>
+    </div>
+  );
+}
+
+function Select({ label, error, className = "", children, ...props }) {
+  return (
+    <label className="block">
+      {label && <span className="block text-xs font-medium text-muted mb-1.5">{label}</span>}
+      <select
+        className={`w-full rounded-xl border bg-white text-sm px-3.5 py-2.5 ${
+          error ? "border-brand" : "border-line"
+        } focus:border-ink outline-none transition-colors ${className}`}
+        {...props}
+      >
+        {children}
+      </select>
+      {error && <span className="block text-[11px] text-brand mt-1">{error}</span>}
+    </label>
+  );
+}
+
+function Tabs({ tabs, active, onChange }) {
+  return (
+    <div className="flex gap-1 bg-mist rounded-xl p-1 w-fit">
+      {tabs.map((t) => (
+        <button
+          key={t.value}
+          onClick={() => onChange(t.value)}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            active === t.value ? "bg-white text-ink shadow-soft" : "text-muted hover:text-ink"
+          }`}
+        >
+          {t.icon && <Icon name={t.icon} size={14} />}
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ConfirmDialog({ open, onClose, onConfirm, title, message, loading }) {
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={title || "Confirmar exclusão"}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button variant="brand" onClick={onConfirm} disabled={loading}>
+            {loading ? "Excluindo..." : "Excluir"}
+          </Button>
+        </>
+      }
+    >
+      <p className="text-sm text-muted">{message || "Essa ação não pode ser desfeita. Deseja continuar?"}</p>
+    </Modal>
+  );
+}
+
+/* ---------------------------------------------------------------
+   CADASTROS — Motoristas e Veículos (CRUD completo no Firestore)
+--------------------------------------------------------------- */
+const DRIVER_STATUS_MAP = {
+  ativo: { label: "Ativo", color: "bg-emerald-100 text-emerald-800", dot: "bg-emerald-500" },
+  disponivel: { label: "Disponível", color: "bg-blue-100 text-blue-800", dot: "bg-blue-500" },
+  em_rota: { label: "Em Rota", color: "bg-amber-100 text-amber-800", dot: "bg-amber-500" },
+  inativo: { label: "Inativo", color: "bg-zinc-200 text-zinc-600", dot: "bg-zinc-500" },
+};
+const VEHICLE_STATUS_MAP = {
+  disponivel: { label: "Disponível", color: "bg-blue-100 text-blue-800", dot: "bg-blue-500" },
+  em_rota: { label: "Em Rota", color: "bg-amber-100 text-amber-800", dot: "bg-amber-500" },
+  manutencao: { label: "Manutenção", color: "bg-orange-100 text-orange-800", dot: "bg-orange-500" },
+  inativo: { label: "Inativo", color: "bg-zinc-200 text-zinc-600", dot: "bg-zinc-500" },
+};
+function SimpleStatusBadge({ status, map }) {
+  const s = map[status] || Object.values(map)[0];
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full ${s.color}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+      {s.label}
+    </span>
+  );
+}
+
+const CNH_CATEGORIAS = ["A", "B", "C", "D", "E", "AB", "AC", "AD", "AE"];
+
+function DriverForm({ initial, vehicles, onSubmit, onCancel, saving }) {
+  const [form, setForm] = useState(
+    initial || { nome: "", telefone: "", cnh: "", categoria: "B", veiculoPadrao: "", status: "disponivel" }
+  );
+  const [errors, setErrors] = useState({});
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const validate = () => {
+    const err = {};
+    if (!form.nome.trim()) err.nome = "Informe o nome.";
+    if (!form.telefone.trim()) err.telefone = "Informe o telefone.";
+    if (!form.cnh.trim()) err.cnh = "Informe o número da CNH.";
+    setErrors(err);
+    return Object.keys(err).length === 0;
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Input label="Nome completo" icon="user" value={form.nome} onChange={set("nome")} error={errors.nome} />
+      <div className="grid grid-cols-2 gap-3">
+        <Input label="Telefone" icon="phone" value={form.telefone} onChange={set("telefone")} error={errors.telefone} placeholder="(00) 00000-0000" />
+        <Input label="CNH" icon="id-card" value={form.cnh} onChange={set("cnh")} error={errors.cnh} />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Select label="Categoria" value={form.categoria} onChange={set("categoria")}>
+          {CNH_CATEGORIAS.map((c) => <option key={c} value={c}>{c}</option>)}
+        </Select>
+        <Select label="Status" value={form.status} onChange={set("status")}>
+          {Object.entries(DRIVER_STATUS_MAP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+        </Select>
+      </div>
+      <Select label="Veículo padrão" value={form.veiculoPadrao} onChange={set("veiculoPadrao")}>
+        <option value="">Nenhum</option>
+        {vehicles.map((v) => <option key={v.id} value={v.id}>{v.modelo} — {v.placa}</option>)}
+      </Select>
+      <div className="flex justify-end gap-2 mt-2">
+        <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
+        <Button variant="brand" disabled={saving} onClick={() => validate() && onSubmit(form)}>
+          {saving ? "Salvando..." : "Salvar motorista"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function VehicleForm({ initial, onSubmit, onCancel, saving }) {
+  const [form, setForm] = useState(
+    initial || { modelo: "", placa: "", capacidade: "", observacoes: "", status: "disponivel" }
+  );
+  const [errors, setErrors] = useState({});
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const validate = () => {
+    const err = {};
+    if (!form.modelo.trim()) err.modelo = "Informe o modelo.";
+    if (!form.placa.trim()) err.placa = "Informe a placa.";
+    setErrors(err);
+    return Object.keys(err).length === 0;
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-2 gap-3">
+        <Input label="Modelo" icon="truck" value={form.modelo} onChange={set("modelo")} error={errors.modelo} placeholder="ex: Iveco Daily" />
+        <Input label="Placa" icon="hash" value={form.placa} onChange={set("placa")} error={errors.placa} placeholder="ABC-1D23" />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Input label="Capacidade" icon="package" value={form.capacidade} onChange={set("capacidade")} placeholder="ex: 1.500 kg" />
+        <Select label="Status" value={form.status} onChange={set("status")}>
+          {Object.entries(VEHICLE_STATUS_MAP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+        </Select>
+      </div>
+      <Input label="Observações" icon="notebook-pen" value={form.observacoes} onChange={set("observacoes")} />
+      <div className="flex justify-end gap-2 mt-2">
+        <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
+        <Button variant="brand" disabled={saving} onClick={() => validate() && onSubmit(form)}>
+          {saving ? "Salvando..." : "Salvar veículo"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ icon, title, subtitle }) {
+  return (
+    <div className="flex flex-col items-center justify-center text-center py-14 gap-3">
+      <div className="w-12 h-12 rounded-2xl bg-mist flex items-center justify-center">
+        <Icon name={icon} size={20} className="text-muted" />
+      </div>
+      <p className="font-display font-semibold text-sm">{title}</p>
+      {subtitle && <p className="text-xs text-muted max-w-xs">{subtitle}</p>}
+    </div>
+  );
+}
+
+function DriversTab() {
+  const { data: drivers, loading } = useCollection("drivers", "nome");
+  const { data: vehicles } = useCollection("vehicles", "modelo");
+  const { data: allSTs } = useAllSTs();
+  const [modal, setModal] = useState(null); // null | 'create' | driver object
+  const [saving, setSaving] = useState(false);
+  const [toDelete, setToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const toast = useToast();
+
+  const vehicleName = (id) => vehicles.find((v) => v.id === id)?.modelo;
+  const driversComRota = new Set(allSTs.filter((s) => s.motoristaId && s.status !== "finalizada").map((s) => s.motoristaId));
+
+  const handleSubmit = async (form) => {
+    setSaving(true);
+    try {
+      if (modal && modal.id) {
+        await updateDocById("drivers", modal.id, form);
+        toast.push({ type: "success", title: "Motorista atualizado" });
+        setModal(null);
+      } else {
+        const ref = await createDoc("drivers", form);
+        let credentialsMsg = "";
+        try {
+          const baseSlug = slugify(form.nome);
+          let slug = baseSlug;
+          let uid = null;
+          for (let attempt = 1; attempt <= 5 && !uid; attempt++) {
+            try {
+              uid = await window.ST.firebase.createAuthAccountKeepSession(driverEmail(slug), toAuthPassword("1234"));
+            } catch (authErr) {
+              if (authErr.code === "auth/email-already-in-use") {
+                attempt += 1;
+                slug = `${baseSlug}-${attempt}`;
+              } else {
+                throw authErr;
+              }
+            }
+          }
+          if (!uid) throw new Error("Não foi possível gerar um login único para esse motorista.");
+          const { db, doc, setDoc, serverTimestamp } = window.ST.firebase;
+          await setDoc(doc(db, "users", uid), {
+            role: "motorista",
+            driverId: ref.id,
+            nome: form.nome,
+            telefone: form.telefone,
+            mustChangePassword: true,
+            createdAt: serverTimestamp(),
+          });
+          await updateDocById("drivers", ref.id, { authUid: uid, loginUsername: slug });
+          credentialsMsg = `Login: ${slug} · Senha inicial: 1234`;
+        } catch (authErr) {
+          console.error("Erro ao criar login do motorista:", authErr);
+          credentialsMsg = "Motorista salvo, mas houve erro ao criar o login — tente editar e salvar de novo.";
+        }
+        toast.push({ type: "success", title: "Motorista cadastrado", message: credentialsMsg, duration: 8000 });
+        setModal(null);
+      }
+    } catch (err) {
+      toast.push({ type: "error", title: "Erro ao salvar", message: err.message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteDocById("drivers", toDelete.id);
+      toast.push({ type: "success", title: "Motorista removido" });
+      setToDelete(null);
+    } catch (err) {
+      toast.push({ type: "error", title: "Erro ao excluir", message: err.message });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-xs text-muted">{drivers.length} motorista(s) cadastrado(s)</p>
+        <Button variant="brand" size="sm" icon="plus" onClick={() => setModal("create")}>Novo motorista</Button>
+      </div>
+
+      <Card className="divide-y divide-line">
+        {loading ? (
+          <div className="p-5 flex flex-col gap-3">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
+        ) : drivers.length === 0 ? (
+          <EmptyState icon="users" title="Nenhum motorista cadastrado" subtitle="Clique em “Novo motorista” para adicionar o primeiro." />
+        ) : (
+          drivers.map((d) => (
+            <div key={d.id} className="p-4 flex items-center gap-4">
+              <div className="w-10 h-10 rounded-full bg-mist flex items-center justify-center text-xs font-semibold shrink-0">
+                {d.nome?.slice(0, 2).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-ink truncate">{d.nome}</p>
+                <p className="text-xs text-muted truncate">
+                  {d.telefone} · CNH {d.categoria} · {vehicleName(d.veiculoPadrao) || "sem veículo padrão"}
+                  {d.loginUsername && <span className="text-ink"> · login: {d.loginUsername}</span>}
+                </p>
+                <div className="mt-1"><DriverLocationBadge driver={d} /></div>
+              </div>
+              {driversComRota.has(d.id) ? (
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Rota programada
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Disponível
+                </span>
+              )}
+              <div className="flex items-center gap-1">
+                <button onClick={() => setModal(d)} className="w-8 h-8 rounded-lg hover:bg-mist flex items-center justify-center transition-colors">
+                  <Icon name="pencil" size={14} />
+                </button>
+                <button onClick={() => setToDelete(d)} className="w-8 h-8 rounded-lg hover:bg-brand-soft text-brand flex items-center justify-center transition-colors">
+                  <Icon name="trash-2" size={14} />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </Card>
+
+      <Modal open={!!modal} onClose={() => setModal(null)} title={modal && modal.id ? "Editar motorista" : "Novo motorista"}>
+        {modal && (
+          <DriverForm
+            initial={modal.id ? modal : null}
+            vehicles={vehicles}
+            saving={saving}
+            onCancel={() => setModal(null)}
+            onSubmit={handleSubmit}
+          />
+        )}
+      </Modal>
+
+      <ConfirmDialog
+        open={!!toDelete}
+        loading={deleting}
+        onClose={() => setToDelete(null)}
+        onConfirm={handleDelete}
+        title="Excluir motorista"
+        message={toDelete ? `Tem certeza que deseja excluir "${toDelete.nome}"? Essa ação não pode ser desfeita.` : ""}
+      />
+    </>
+  );
+}
+
+function VehiclesTab() {
+  const { data: vehicles, loading } = useCollection("vehicles", "modelo");
+  const [modal, setModal] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [toDelete, setToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const toast = useToast();
+
+  const handleSubmit = async (form) => {
+    setSaving(true);
+    try {
+      if (modal && modal.id) {
+        await updateDocById("vehicles", modal.id, form);
+        toast.push({ type: "success", title: "Veículo atualizado" });
+      } else {
+        await createDoc("vehicles", form);
+        toast.push({ type: "success", title: "Veículo cadastrado" });
+      }
+      setModal(null);
+    } catch (err) {
+      toast.push({ type: "error", title: "Erro ao salvar", message: err.message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteDocById("vehicles", toDelete.id);
+      toast.push({ type: "success", title: "Veículo removido" });
+      setToDelete(null);
+    } catch (err) {
+      toast.push({ type: "error", title: "Erro ao excluir", message: err.message });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-xs text-muted">{vehicles.length} veículo(s) cadastrado(s)</p>
+        <Button variant="brand" size="sm" icon="plus" onClick={() => setModal("create")}>Novo veículo</Button>
+      </div>
+
+      <Card className="divide-y divide-line">
+        {loading ? (
+          <div className="p-5 flex flex-col gap-3">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
+        ) : vehicles.length === 0 ? (
+          <EmptyState icon="car" title="Nenhum veículo cadastrado" subtitle="Clique em “Novo veículo” para adicionar o primeiro." />
+        ) : (
+          vehicles.map((v) => (
+            <div key={v.id} className="p-4 flex items-center gap-4">
+              <div className="w-10 h-10 rounded-xl bg-mist flex items-center justify-center shrink-0">
+                <Icon name="truck" size={16} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-ink truncate">{v.modelo}</p>
+                <p className="text-xs text-muted truncate st-number">{v.placa} {v.capacidade ? `· ${v.capacidade}` : ""}</p>
+              </div>
+              <SimpleStatusBadge status={v.status} map={VEHICLE_STATUS_MAP} />
+              <div className="flex items-center gap-1">
+                <button onClick={() => setModal(v)} className="w-8 h-8 rounded-lg hover:bg-mist flex items-center justify-center transition-colors">
+                  <Icon name="pencil" size={14} />
+                </button>
+                <button onClick={() => setToDelete(v)} className="w-8 h-8 rounded-lg hover:bg-brand-soft text-brand flex items-center justify-center transition-colors">
+                  <Icon name="trash-2" size={14} />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </Card>
+
+      <Modal open={!!modal} onClose={() => setModal(null)} title={modal && modal.id ? "Editar veículo" : "Novo veículo"}>
+        {modal && (
+          <VehicleForm initial={modal.id ? modal : null} saving={saving} onCancel={() => setModal(null)} onSubmit={handleSubmit} />
+        )}
+      </Modal>
+
+      <ConfirmDialog
+        open={!!toDelete}
+        loading={deleting}
+        onClose={() => setToDelete(null)}
+        onConfirm={handleDelete}
+        title="Excluir veículo"
+        message={toDelete ? `Tem certeza que deseja excluir "${toDelete.modelo}" (${toDelete.placa})?` : ""}
+      />
+    </>
+  );
+}
+
+function useAppUsers() {
+  const { data, loading } = useCollection("users");
+  return { data: data.filter((u) => u.role === "usuario"), loading };
+}
+
+function UserForm({ initial, onSubmit, onCancel, saving }) {
+  const isEdit = !!initial;
+  const [form, setForm] = useState(
+    initial
+      ? { nome: initial.nome, login: initial.login, setorSlug: initial.setorSlug }
+      : { nome: "", login: "", setorSlug: DEPARTMENTS[0].slug, loginEdited: false }
+  );
+  const [errors, setErrors] = useState({});
+
+  const setNome = (e) => {
+    const nome = e.target.value;
+    setForm((f) => ({ ...f, nome, login: f.loginEdited ? f.login : slugify(nome) }));
+  };
+  const setLogin = (e) => setForm((f) => ({ ...f, login: e.target.value, loginEdited: true }));
+  const setSetor = (e) => setForm((f) => ({ ...f, setorSlug: e.target.value }));
+
+  const validate = () => {
+    const err = {};
+    if (!form.nome.trim()) err.nome = "Informe o nome.";
+    if (!isEdit && !slugify(form.login).trim()) err.login = "Informe um login.";
+    if (!form.setorSlug) err.setorSlug = "Selecione o setor.";
+    setErrors(err);
+    return Object.keys(err).length === 0;
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Input label="Nome completo" icon="user" value={form.nome} onChange={setNome} error={errors.nome} />
+      <Input
+        label={isEdit ? "Login (não pode ser alterado)" : "Login"}
+        icon="at-sign"
+        value={form.login}
+        onChange={setLogin}
+        error={errors.login}
+        disabled={isEdit}
+        className={isEdit ? "bg-mist text-muted" : ""}
+      />
+      <Select label="Setor" value={form.setorSlug} onChange={setSetor} error={errors.setorSlug}>
+        {DEPARTMENTS.map((d) => <option key={d.slug} value={d.slug}>{d.nome}</option>)}
+      </Select>
+      {!isEdit && <p className="text-[11px] text-muted -mt-2">Senha inicial: <span className="st-number">1234</span> (a pessoa pode trocar depois no perfil).</p>}
+      <div className="flex justify-end gap-2 mt-2">
+        <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
+        <Button variant="brand" disabled={saving} onClick={() => validate() && onSubmit({ ...form, login: slugify(form.login) })}>
+          {saving ? "Salvando..." : "Salvar usuário"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function UsersTab() {
+  const { data: users, loading } = useAppUsers();
+  const [modal, setModal] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [toDelete, setToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const toast = useToast();
+
+  const handleSubmit = async (form) => {
+    setSaving(true);
+    try {
+      if (modal && modal.id) {
+        const dept = DEPARTMENTS.find((d) => d.slug === form.setorSlug);
+        await updateDocById("users", modal.id, { nome: form.nome, setorSlug: dept.slug, setorNome: dept.nome });
+        toast.push({ type: "success", title: "Usuário atualizado" });
+        setModal(null);
+      } else {
+        const dept = DEPARTMENTS.find((d) => d.slug === form.setorSlug);
+        const email = loginEmail(form.login);
+        const uid = await window.ST.firebase.createAuthAccountKeepSession(email, toAuthPassword("1234"));
+        const { db, doc, setDoc, serverTimestamp } = window.ST.firebase;
+        await setDoc(doc(db, "users", uid), {
+          role: "usuario",
+          nome: form.nome,
+          login: form.login,
+          setorSlug: dept.slug,
+          setorNome: dept.nome,
+          mustChangePassword: true,
+          createdAt: serverTimestamp(),
+        });
+        toast.push({ type: "success", title: "Usuário cadastrado", message: `Login: ${form.login} · Senha inicial: 1234`, duration: 8000 });
+        setModal(null);
+      }
+    } catch (err) {
+      toast.push({
+        type: "error",
+        title: "Erro ao salvar",
+        message: err.code === "auth/email-already-in-use" ? "Esse login já existe — escolha outro." : err.message,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteDocById("users", toDelete.id);
+      toast.push({ type: "success", title: "Usuário removido", message: "O acesso dele ao sistema foi desativado." });
+      setToDelete(null);
+    } catch (err) {
+      toast.push({ type: "error", title: "Erro ao excluir", message: err.message });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-xs text-muted">{users.length} usuário(s) cadastrado(s)</p>
+        <Button variant="brand" size="sm" icon="user-plus" onClick={() => setModal("create")}>Novo usuário</Button>
+      </div>
+
+      <Card className="divide-y divide-line">
+        {loading ? (
+          <div className="p-5 flex flex-col gap-3"><Skeleton className="h-12 w-full" /><Skeleton className="h-12 w-full" /></div>
+        ) : users.length === 0 ? (
+          <EmptyState icon="user-plus" title="Nenhum usuário cadastrado" subtitle="Clique em “Novo usuário” pra dar acesso a alguém de um setor." />
+        ) : (
+          users.map((u) => (
+            <div key={u.id} className="p-4 flex items-center gap-4">
+              <div className="w-10 h-10 rounded-full bg-mist flex items-center justify-center text-xs font-semibold shrink-0">
+                {u.nome?.slice(0, 2).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-ink truncate">{u.nome}</p>
+                <p className="text-xs text-muted truncate">{u.setorNome} · login: <span className="st-number">{u.login}</span></p>
+              </div>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setModal(u)} className="w-8 h-8 rounded-lg hover:bg-mist flex items-center justify-center transition-colors">
+                  <Icon name="pencil" size={14} />
+                </button>
+                <button onClick={() => setToDelete(u)} className="w-8 h-8 rounded-lg hover:bg-brand-soft text-brand flex items-center justify-center transition-colors">
+                  <Icon name="trash-2" size={14} />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </Card>
+
+      <Modal open={!!modal} onClose={() => setModal(null)} title={modal && modal.id ? "Editar usuário" : "Novo usuário"}>
+        {modal && <UserForm initial={modal.id ? modal : null} saving={saving} onCancel={() => setModal(null)} onSubmit={handleSubmit} />}
+      </Modal>
+
+      <ConfirmDialog
+        open={!!toDelete}
+        loading={deleting}
+        onClose={() => setToDelete(null)}
+        onConfirm={handleDelete}
+        title="Excluir usuário"
+        message={toDelete ? `Tem certeza que deseja excluir "${toDelete.nome}"? O login dele deixa de funcionar no sistema.` : ""}
+      />
+    </>
+  );
+}
+
+function DepartmentOverviewTab() {
+  const { data: sts, loading: loadingSTs } = useAllSTs();
+  const { data: usuarios, loading: loadingUsers } = useAppUsers();
+  const loading = loadingSTs || loadingUsers;
+
+  if (loading) {
+    return <div className="grid md:grid-cols-2 gap-4"><Skeleton className="h-48" /><Skeleton className="h-48" /></div>;
+  }
+
+  return (
+    <div className="grid md:grid-cols-2 gap-4">
+      {DEPARTMENTS.map((d) => {
+        const deptUsers = usuarios.filter((u) => u.setorSlug === d.slug);
+        const deptSTs = sts.filter((s) => s.setorSlug === d.slug);
+        const statusCounts = {
+          solicitacao: deptSTs.filter((s) => s.status === "solicitacao").length,
+          programada: deptSTs.filter((s) => s.status === "programada").length,
+          em_rota: deptSTs.filter((s) => s.status === "em_rota").length,
+          finalizada: deptSTs.filter((s) => s.status === "finalizada").length,
+        };
+        const max = Math.max(1, ...Object.values(statusCounts));
+
+        return (
+          <Card key={d.slug} className="p-4 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <p className="font-display font-semibold text-sm">{d.nome}</p>
+              <span className="text-[11px] text-muted">{deptUsers.length} usuário(s) · {deptSTs.length} ST(s)</span>
+            </div>
+
+            {deptSTs.length === 0 ? (
+              <p className="text-xs text-muted">Nenhuma ST registrada ainda.</p>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                {Object.entries(statusCounts).map(([k, v]) => (
+                  <div key={k} className="flex items-center gap-2">
+                    <span className="text-[10px] text-muted w-16 shrink-0">{STATUS_MAP[k].label}</span>
+                    <div className="flex-1 h-1.5 rounded-full bg-mist overflow-hidden">
+                      <div className="h-full bg-ink rounded-full transition-all duration-500" style={{ width: `${(v / max) * 100}%` }} />
+                    </div>
+                    <span className="text-[10px] text-muted w-4 text-right st-number">{v}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {deptUsers.length > 0 && (
+              <div className="pt-2 border-t border-line flex flex-wrap gap-1.5">
+                {deptUsers.map((u) => {
+                  const count = deptSTs.filter((s) => s.criadoPorUid === u.id).length;
+                  return (
+                    <span key={u.id} className="text-[10px] bg-mist rounded-full px-2 py-1 text-muted">
+                      {u.nome} <span className="st-number">({count})</span>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+function CadastrosPage() {
+  const [tab, setTab] = useState("usuarios");
+  return (
+    <div className="flex-1 min-h-screen bg-mist">
+      <Topbar title="Cadastros" subtitle="Usuários, setores, motoristas e veículos" />
+      <div className="p-6 flex flex-col gap-5">
+        <Tabs
+          active={tab}
+          onChange={setTab}
+          tabs={[
+            { value: "usuarios", label: "Usuários", icon: "user-plus" },
+            { value: "motoristas", label: "Motoristas", icon: "users" },
+            { value: "veiculos", label: "Veículos", icon: "car" },
+            { value: "setores", label: "Setores", icon: "building-2" },
+          ]}
+        />
+        {tab === "usuarios" && <UsersTab />}
+        {tab === "motoristas" && <DriversTab />}
+        {tab === "veiculos" && <VehiclesTab />}
+        {tab === "setores" && <DepartmentOverviewTab />}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------
+   SOLICITAÇÕES DE TRANSPORTE (ST) — Parte 4
+--------------------------------------------------------------- */
+const TIPO_DEMANDA_OPTIONS = [
+  { value: "coleta", label: "Coleta" },
+  { value: "entrega", label: "Entrega" },
+  { value: "coleta_entrega", label: "Coleta + Entrega" },
+  { value: "terceiro_coleta", label: "Terceiro/Coleta" },
+  { value: "terceiro_entrega", label: "Terceiro/Entrega" },
+  { value: "outro", label: "Outro" },
+];
+function isTerceiroDemanda(tipo) {
+  return tipo === "terceiro_coleta" || tipo === "terceiro_entrega";
+}
+const VEICULO_OPTIONS = ["Iveco Tector", "Iveco Daily", "Fiat Strada", "Ford Ka", "Carreta", "Prancha", "Não sei informar", "Outro"];
+
+async function getNextSTNumber() {
+  const { db, doc, runTransaction } = window.ST.firebase;
+  const counterRef = doc(db, "settings", "st_counter");
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(counterRef);
+    const current = snap.exists() ? snap.data().seq || 0 : 0;
+    const next = current + 1;
+    tx.set(counterRef, { seq: next }, { merge: true });
+    return "ST" + String(next).padStart(6, "0");
+  });
+}
+
+async function addTimelineEntry(stId, usuario, acao) {
+  const { db, collection, addDoc, serverTimestamp } = window.ST.firebase;
+  return addDoc(collection(db, "timeline"), { stId, usuario, acao, createdAt: serverTimestamp(), createdAtMs: Date.now() });
+}
+
+// Aplica motorista + status + dia + horário a uma ST — usada tanto em
+// "Gerenciar" (Todas STs) quanto em "Programar" (Programação).
+async function applySTAssignment(st, motoristaId, status, dataDesejada, horario, drivers) {
+  const { db, doc, updateDoc } = window.ST.firebase;
+  const driver = drivers.find((d) => d.id === motoristaId);
+
+  // atribuir um motorista a uma ST que ainda está só "Solicitação" já conta
+  // como tê-la programado — promove o status automaticamente nesse caso.
+  let finalStatus = status;
+  if (motoristaId && finalStatus === "solicitacao") {
+    finalStatus = "programada";
+  }
+
+  const updates = {
+    motoristaId: motoristaId || null,
+    motoristaNome: driver ? driver.nome : null,
+    status: finalStatus,
+    vistoPelaLogistica: true,
+  };
+  if (horario) updates.horario = horario;
+  const dateChanged = dataDesejada && st.dataDesejada && dataDesejada !== st.dataDesejada;
+  if (dataDesejada) updates.dataDesejada = dataDesejada;
+  if (dateChanged) {
+    updates.reprogramacoes = [
+      ...(st.reprogramacoes || []),
+      { dataAnterior: st.dataDesejada, dataNova: dataDesejada, motivo: "Definido ao programar a rota", usuario: "Logística", registradoEm: new Date().toISOString() },
+    ];
+    // a ST foi reprogramada agora — o aviso de "não atendida" não faz mais sentido
+    if (st.precisaReagendar) updates.precisaReagendar = false;
+  }
+  await updateDoc(doc(db, "transport_requests", st.id), updates);
+  await addTimelineEntry(
+    st.numero,
+    "Logística",
+    `Logística programou a ST${driver ? ` — motorista: ${driver.nome}` : ""}${dataDesejada ? `, dia: ${dataDesejada}` : ""}${horario ? `, horário: ${horario}` : ""} (status: ${STATUS_MAP[finalStatus].label})`
+  );
+  if (finalStatus === "programada" && st.status !== "programada" && st.setorSlug) {
+    await createNotification(
+      "setor",
+      st.setorSlug,
+      st.numero,
+      `Sua ST ${st.numero} foi programada${driver ? ` — motorista: ${driver.nome}` : ""}${dataDesejada ? ` para ${dataDesejada}` : ""}`
+    );
+  }
+  return driver;
+}
+
+function useTimeline(stId) {
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (!stId) { setLoading(false); return; }
+    let unsub = () => {};
+    const start = () => {
+      const { db, collection, query, where, onSnapshot } = window.ST.firebase;
+      const q = query(collection(db, "timeline"), where("stId", "==", stId));
+      unsub = onSnapshot(
+        q,
+        (snap) => {
+          const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          rows.sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0));
+          setData(rows);
+          setLoading(false);
+        },
+        () => setLoading(false)
+      );
+    };
+    if (window.ST && window.ST.firebase) start();
+    else window.addEventListener("st:firebase-ready", start, { once: true });
+    return () => unsub();
+  }, [stId]);
+  return { data, loading };
+}
+
+function formatTimelineDate(ms) {
+  if (!ms) return "";
+  return new Date(ms).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function TimelineModal({ st, onClose }) {
+  const { data, loading } = useTimeline(st ? st.numero : null);
+  return (
+    <Modal open={!!st} onClose={onClose} title={st ? `Histórico — ${st.numero}` : ""}>
+      {loading ? (
+        <div className="flex flex-col gap-3"><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-full" /></div>
+      ) : data.length === 0 ? (
+        <p className="text-xs text-muted">Nenhum registro ainda.</p>
+      ) : (
+        <div className="flex flex-col">
+          {data.map((entry, i) => (
+            <div key={entry.id} className="flex gap-3">
+              <div className="flex flex-col items-center">
+                <div className="w-2 h-2 rounded-full bg-ink mt-1.5 shrink-0" />
+                {i < data.length - 1 && <div className="w-px flex-1 bg-line" />}
+              </div>
+              <div className="pb-4 min-w-0">
+                <p className="text-sm text-ink">{entry.acao}</p>
+                <p className="text-[11px] text-muted mt-0.5">{entry.usuario} · {formatTimelineDate(entry.createdAtMs)}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+/* ---------------------------------------------------------------
+   NOTIFICAÇÕES — Parte 8
+--------------------------------------------------------------- */
+async function createNotification(targetType, targetValue, stNumero, mensagem) {
+  const { db, collection, addDoc, serverTimestamp } = window.ST.firebase;
+  return addDoc(collection(db, "notifications"), {
+    targetType, targetValue, stNumero, mensagem, lida: false,
+    createdAt: serverTimestamp(), createdAtMs: Date.now(),
+  });
+}
+
+async function markNotificationRead(id) {
+  const { db, doc, updateDoc } = window.ST.firebase;
+  return updateDoc(doc(db, "notifications", id), { lida: true });
+}
+
+function useNotifications(targetType, targetValue) {
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (!targetType || !targetValue) { setLoading(false); return; }
+    let unsub = () => {};
+    const start = () => {
+      const { db, collection, query, where, onSnapshot } = window.ST.firebase;
+      const q = query(collection(db, "notifications"), where("targetType", "==", targetType), where("targetValue", "==", targetValue));
+      unsub = onSnapshot(
+        q,
+        (snap) => {
+          const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          rows.sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
+          setData(rows);
+          setLoading(false);
+        },
+        () => setLoading(false)
+      );
+    };
+    if (window.ST && window.ST.firebase) start();
+    else window.addEventListener("st:firebase-ready", start, { once: true });
+    return () => unsub();
+  }, [targetType, targetValue]);
+  return { data, loading };
+}
+
+function NotificationsPage() {
+  const { profile } = useAuth();
+  const isLogistica = profile.role === "logistica";
+  const targetType = isLogistica ? "role" : "setor";
+  const targetValue = isLogistica ? "logistica" : profile.setorSlug;
+  const { data: notifs, loading } = useNotifications(targetType, targetValue);
+  const unreadCount = notifs.filter((n) => !n.lida).length;
+
+  return (
+    <div className="flex-1 min-h-screen bg-mist">
+      <Topbar title="Notificações" subtitle={loading ? "" : `${unreadCount} não lida(s)`} />
+      <div className="p-6">
+        {loading ? (
+          <div className="flex flex-col gap-3"><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /></div>
+        ) : notifs.length === 0 ? (
+          <Card className="p-10"><EmptyState icon="bell" title="Nenhuma notificação ainda" /></Card>
+        ) : (
+          <Card className="divide-y divide-line">
+            {notifs.map((n) => (
+              <div
+                key={n.id}
+                onClick={() => !n.lida && markNotificationRead(n.id)}
+                className={`p-4 flex items-start gap-3 cursor-pointer transition-colors hover:bg-mist ${n.lida ? "" : "bg-brand-soft"}`}
+              >
+                <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${n.lida ? "bg-line" : "bg-brand"}`} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-ink">{n.mensagem}</p>
+                  <p className="text-[11px] text-muted mt-1 st-number">{n.stNumero} · {formatTimelineDate(n.createdAtMs)}</p>
+                </div>
+              </div>
+            ))}
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function useSTsWhere(field, value) {
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (!value) { setLoading(false); return; }
+    let unsub = () => {};
+    const start = () => {
+      const { db, collection, query, where, onSnapshot } = window.ST.firebase;
+      const q = query(collection(db, "transport_requests"), where(field, "==", value));
+      unsub = onSnapshot(
+        q,
+        (snap) => {
+          const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          rows.sort((a, b) => (b.numero || "").localeCompare(a.numero || ""));
+          setData(rows);
+          setLoading(false);
+        },
+        (err) => { console.error(err); setLoading(false); }
+      );
+    };
+    if (window.ST && window.ST.firebase) start();
+    else window.addEventListener("st:firebase-ready", start, { once: true });
+    return () => unsub();
+  }, [field, value]);
+  return { data, loading };
+}
+
+function useAllSTs() {
+  const { data, loading } = useCollection("transport_requests");
+  const sorted = [...data].sort((a, b) => (b.numero || "").localeCompare(a.numero || ""));
+  return { data: sorted, loading };
+}
+
+/* ---------------------------------------------------------------
+   RELATÓRIOS — Parte 9
+--------------------------------------------------------------- */
+function exportPDF(rows, filtersLabel) {
+  if (!window.jspdf) {
+    alert("A biblioteca de PDF não carregou — verifique sua conexão e tente de novo.");
+    return;
+  }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: "landscape" });
+  const marginX = 10;
+  let y = 15;
+
+  doc.setFontSize(14);
+  doc.text("Relatório de Solicitações de Transporte — ST Logística", marginX, y);
+  y += 6;
+  doc.setFontSize(8);
+  doc.text(filtersLabel, marginX, y);
+  y += 4;
+  doc.text(`Gerado em ${new Date().toLocaleString("pt-BR")} — ${rows.length} registro(s)`, marginX, y);
+  y += 8;
+
+  const columns = [
+    { label: "Número", key: "numero", w: 18 },
+    { label: "Setor", key: "setorNome", w: 22 },
+    { label: "Usuário", key: "criadoPorNome", w: 22 },
+    { label: "Fornecedor/Destino", key: "fornecedorDestino", w: 42 },
+    { label: "Cidade", key: "cidade", w: 22 },
+    { label: "Motorista", key: "motoristaNome", w: 26 },
+    { label: "Status", key: "statusLabel", w: 20 },
+    { label: "Prioridade", key: "prioridadeLabel", w: 20 },
+    { label: "Data original", key: "dataOriginal", w: 20 },
+    { label: "Data atual", key: "dataDesejada", w: 20 },
+    { label: "Reprog.", key: "qtdReprogramacoes", w: 14 },
+  ];
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const rowHeight = 6.5;
+
+  function drawHeader() {
+    doc.setFontSize(8);
+    doc.setFont(undefined, "bold");
+    let x = marginX;
+    columns.forEach((c) => { doc.text(c.label, x, y); x += c.w; });
+    y += 2;
+    doc.setLineWidth(0.2);
+    doc.line(marginX, y, marginX + columns.reduce((s, c) => s + c.w, 0), y);
+    y += 5;
+    doc.setFont(undefined, "normal");
+  }
+
+  drawHeader();
+  rows.forEach((r) => {
+    if (y > pageHeight - 15) {
+      doc.addPage();
+      y = 15;
+      drawHeader();
+    }
+    let x = marginX;
+    columns.forEach((c) => {
+      const text = String(r[c.key] ?? "-").slice(0, 42);
+      doc.text(text, x, y);
+      x += c.w;
+    });
+    y += rowHeight;
+  });
+
+  doc.save(`relatorio-sts-${Date.now()}.pdf`);
+}
+
+function exportExcel(rows) {
+  if (!window.XLSX) {
+    alert("A biblioteca de Excel não carregou — verifique sua conexão e tente de novo.");
+    return;
+  }
+  const data = rows.map((r) => ({
+    Número: r.numero,
+    Setor: r.setorNome,
+    Usuário: r.criadoPorNome || "",
+    "Fornecedor/Destino": r.fornecedorDestino,
+    Cidade: r.cidade,
+    Bairro: r.bairro,
+    Motorista: r.motoristaNome || "",
+    Status: r.statusLabel,
+    Prioridade: r.prioridadeLabel,
+    "Data original": r.dataOriginal || "",
+    "Data desejada (atual)": r.dataDesejada || "",
+    "Qtd. reprogramações": r.qtdReprogramacoes,
+    "Última reprogramação": r.ultimaReprogramacao || "",
+    "Veículo indicado": r.veiculoIndicado || "",
+    "Nota Fiscal": r.notaFiscal || "",
+  }));
+  const ws = window.XLSX.utils.json_to_sheet(data);
+  const wb = window.XLSX.utils.book_new();
+  window.XLSX.utils.book_append_sheet(wb, ws, "STs");
+  window.XLSX.writeFile(wb, `relatorio-sts-${Date.now()}.xlsx`);
+}
+
+function exportCSV(rows) {
+  const headers = ["Numero", "Setor", "Usuario", "Fornecedor", "Cidade", "Bairro", "Motorista", "Status", "Prioridade", "DataOriginal", "DataDesejadaAtual", "QtdReprogramacoes", "UltimaReprogramacao", "Veiculo", "NotaFiscal"];
+  const escape = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const lines = [headers.join(";")];
+  rows.forEach((r) => {
+    lines.push(
+      [r.numero, r.setorNome, r.criadoPorNome || "", r.fornecedorDestino, r.cidade, r.bairro, r.motoristaNome || "", r.statusLabel, r.prioridadeLabel, r.dataOriginal || "", r.dataDesejada || "", r.qtdReprogramacoes, r.ultimaReprogramacao || "", r.veiculoIndicado || "", r.notaFiscal || ""]
+        .map(escape)
+        .join(";")
+    );
+  });
+  const csvContent = "\uFEFF" + lines.join("\r\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `relatorio-sts-${Date.now()}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function ReportsPage() {
+  const { data: sts, loading } = useAllSTs();
+  const { data: drivers } = useCollection("drivers", "nome");
+  const { data: usuarios } = useAppUsers();
+  const [filters, setFilters] = useState({ motoristaId: "", cidade: "", fornecedor: "", setorSlug: "", veiculo: "", dataInicio: "", dataFim: "", pedido: "", notaFiscal: "", usuarioUid: "", reprogramadas: "" });
+  const set = (k) => (e) => setFilters((f) => ({ ...f, [k]: e.target.value }));
+
+  const filtered = sts.filter((s) => {
+    if (filters.motoristaId && s.motoristaId !== filters.motoristaId) return false;
+    if (filters.cidade && !(s.cidade || "").toLowerCase().includes(filters.cidade.toLowerCase())) return false;
+    if (filters.fornecedor && !(s.fornecedorDestino || "").toLowerCase().includes(filters.fornecedor.toLowerCase())) return false;
+    if (filters.setorSlug && s.setorSlug !== filters.setorSlug) return false;
+    if (filters.veiculo && s.veiculoIndicado !== filters.veiculo) return false;
+    if (filters.dataInicio && (!s.dataDesejada || s.dataDesejada < filters.dataInicio)) return false;
+    if (filters.dataFim && (!s.dataDesejada || s.dataDesejada > filters.dataFim)) return false;
+    if (filters.pedido && !(s.pedidosCompra || "").toLowerCase().includes(filters.pedido.toLowerCase())) return false;
+    if (filters.notaFiscal && !(s.notaFiscal || "").toLowerCase().includes(filters.notaFiscal.toLowerCase())) return false;
+    if (filters.usuarioUid && s.criadoPorUid !== filters.usuarioUid) return false;
+    const reprogCount = s.reprogramacoes ? s.reprogramacoes.length : 0;
+    if (filters.reprogramadas === "sim" && reprogCount === 0) return false;
+    if (filters.reprogramadas === "nao" && reprogCount > 0) return false;
+    return true;
+  });
+
+  const rows = filtered.map((s) => ({
+    ...s,
+    statusLabel: STATUS_MAP[s.status] ? STATUS_MAP[s.status].label : s.status,
+    prioridadeLabel: PRIORITY_MAP[s.prioridade] ? PRIORITY_MAP[s.prioridade].label : s.prioridade,
+    dataOriginal: s.reprogramacoes && s.reprogramacoes.length ? s.reprogramacoes[0].dataAnterior : s.dataDesejada || "",
+    qtdReprogramacoes: s.reprogramacoes ? s.reprogramacoes.length : 0,
+    ultimaReprogramacao: s.reprogramacoes && s.reprogramacoes.length ? s.reprogramacoes[s.reprogramacoes.length - 1].dataNova : "",
+  }));
+
+  const filtersLabel =
+    Object.entries(filters)
+      .filter(([, v]) => v)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join(" · ") || "Sem filtros aplicados";
+
+  return (
+    <div className="flex-1 min-h-screen bg-mist">
+      <Topbar title="Relatórios" subtitle="Exporte as STs filtradas em PDF, Excel ou CSV" />
+      <div className="p-6 flex flex-col gap-6">
+        <Card className="p-5">
+          <h2 className="font-display font-semibold text-sm mb-4">Filtros</h2>
+          <div className="grid md:grid-cols-3 gap-3">
+            <Select label="Setor" value={filters.setorSlug} onChange={set("setorSlug")}>
+              <option value="">Todos</option>
+              {DEPARTMENTS.map((d) => <option key={d.slug} value={d.slug}>{d.nome}</option>)}
+            </Select>
+            <Select label="Usuário" value={filters.usuarioUid} onChange={set("usuarioUid")}>
+              <option value="">Todos</option>
+              {usuarios.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
+            </Select>
+            <Select label="Motorista" value={filters.motoristaId} onChange={set("motoristaId")}>
+              <option value="">Todos</option>
+              {drivers.map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}
+            </Select>
+            <Select label="Veículo indicado" value={filters.veiculo} onChange={set("veiculo")}>
+              <option value="">Todos</option>
+              {VEICULO_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+            </Select>
+            <Input label="Cidade" value={filters.cidade} onChange={set("cidade")} placeholder="ex: Contagem" />
+            <Input label="Fornecedor/Destino" value={filters.fornecedor} onChange={set("fornecedor")} />
+            <Input label="Pedido de Compra" value={filters.pedido} onChange={set("pedido")} placeholder="número do pedido" />
+            <Input label="Nota Fiscal" value={filters.notaFiscal} onChange={set("notaFiscal")} placeholder="número da NF" />
+            <Select label="Reprogramadas" value={filters.reprogramadas} onChange={set("reprogramadas")}>
+              <option value="">Todas</option>
+              <option value="sim">Somente reprogramadas</option>
+              <option value="nao">Nunca reprogramadas</option>
+            </Select>
+            <div className="grid grid-cols-2 gap-2">
+              <Input label="Período (de)" type="date" value={filters.dataInicio} onChange={set("dataInicio")} />
+              <Input label="Período (até)" type="date" value={filters.dataFim} onChange={set("dataFim")} />
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h2 className="font-display font-semibold text-sm">{loading ? "Carregando..." : `${rows.length} resultado(s)`}</h2>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" icon="file-text" onClick={() => exportPDF(rows, filtersLabel)} disabled={rows.length === 0}>PDF</Button>
+              <Button variant="outline" size="sm" icon="file-spreadsheet" onClick={() => exportExcel(rows)} disabled={rows.length === 0}>Excel</Button>
+              <Button variant="outline" size="sm" icon="file-down" onClick={() => exportCSV(rows)} disabled={rows.length === 0}>CSV</Button>
+            </div>
+          </div>
+          {loading ? (
+            <Skeleton className="h-40 w-full" />
+          ) : rows.length === 0 ? (
+            <EmptyState icon="file-search" title="Nenhum resultado para os filtros escolhidos" />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-left text-muted border-b border-line">
+                    <th className="py-2 pr-3">Número</th>
+                    <th className="py-2 pr-3">Setor</th>
+                    <th className="py-2 pr-3">Usuário</th>
+                    <th className="py-2 pr-3">Fornecedor/Destino</th>
+                    <th className="py-2 pr-3">Cidade</th>
+                    <th className="py-2 pr-3">Motorista</th>
+                    <th className="py-2 pr-3">Status</th>
+                    <th className="py-2 pr-3">Prioridade</th>
+                    <th className="py-2 pr-3">Data original</th>
+                    <th className="py-2 pr-3">Data atual</th>
+                    <th className="py-2 pr-3">Reprog.</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {rows.slice(0, 200).map((r) => (
+                    <tr key={r.id}>
+                      <td className="py-2 pr-3 st-number">{r.numero}</td>
+                      <td className="py-2 pr-3">{r.setorNome}</td>
+                      <td className="py-2 pr-3">{r.criadoPorNome || "—"}</td>
+                      <td className="py-2 pr-3">{r.fornecedorDestino}</td>
+                      <td className="py-2 pr-3">{r.cidade}</td>
+                      <td className="py-2 pr-3">{r.motoristaNome || "—"}</td>
+                      <td className="py-2 pr-3">{r.statusLabel}</td>
+                      <td className="py-2 pr-3">{r.prioridadeLabel}</td>
+                      <td className="py-2 pr-3 st-number">{r.dataOriginal}</td>
+                      <td className="py-2 pr-3 st-number">{r.dataDesejada}</td>
+                      <td className="py-2 pr-3 st-number">{r.qtdReprogramacoes || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {rows.length > 200 && (
+                <p className="text-[11px] text-muted mt-3">Mostrando 200 de {rows.length} — a exportação inclui todos os resultados filtrados.</p>
+              )}
+            </div>
+          )}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------
+   PLANEJAMENTO DE ROTAS — Parte 7
+--------------------------------------------------------------- */
+const PRIORITY_RANK = { emergencial: 0, alta: 1, media: 2, baixa: 3 };
+
+function sortQueue(sts) {
+  return [...sts].sort((a, b) => {
+    const ao = a.ordem ?? 999999;
+    const bo = b.ordem ?? 999999;
+    if (ao !== bo) return ao - bo;
+    const pa = PRIORITY_RANK[a.prioridade] ?? 9;
+    const pb = PRIORITY_RANK[b.prioridade] ?? 9;
+    if (pa !== pb) return pa - pb;
+    return (a.numero || "").localeCompare(b.numero || "");
+  });
+}
+
+function InlineDateEditor({ st }) {
+  const [value, setValue] = useState(st.dataDesejada || "");
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
+
+  const handleChange = async (e) => {
+    const novaData = e.target.value;
+    setValue(novaData);
+    if (!novaData || novaData === st.dataDesejada) return;
+    setSaving(true);
+    try {
+      const { db, doc, updateDoc } = window.ST.firebase;
+      const updates = { dataDesejada: novaData };
+      if (st.dataDesejada) {
+        updates.reprogramacoes = [
+          ...(st.reprogramacoes || []),
+          { dataAnterior: st.dataDesejada, dataNova: novaData, motivo: "Definido no Planejamento de Rotas", usuario: "Logística", registradoEm: new Date().toISOString() },
+        ];
+      }
+      await updateDoc(doc(db, "transport_requests", st.id), updates);
+      await addTimelineEntry(
+        st.numero,
+        "Logística",
+        st.dataDesejada ? `Logística reprogramou a ST de ${st.dataDesejada} para ${novaData}` : `Logística definiu a data desejada: ${novaData}`
+      );
+      toast.push({ type: "success", title: "Data atualizada" });
+    } catch (err) {
+      toast.push({ type: "error", title: "Erro ao salvar data", message: err.message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <label
+      className="flex items-center gap-1.5 text-[11px] text-muted shrink-0"
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+      draggable={false}
+    >
+      <Icon name="calendar" size={12} />
+      <input
+        type="date"
+        value={value}
+        onChange={handleChange}
+        disabled={saving}
+        className="text-[11px] border border-line rounded-md px-1.5 py-1 bg-white outline-none focus:border-ink"
+      />
+    </label>
+  );
+}
+
+function DriverQueueColumn({ driver, sts, onReorder }) {
+  const [dragId, setDragId] = useState(null);
+  const [overId, setOverId] = useState(null);
+  const ordered = sortQueue(sts);
+  const toast = useToast();
+
+  const handleDrop = (targetId) => {
+    setOverId(null);
+    if (!dragId || dragId === targetId) return;
+    const ids = ordered.map((s) => s.id);
+    const fromIdx = ids.indexOf(dragId);
+    const toIdx = ids.indexOf(targetId);
+    if (fromIdx === -1 || toIdx === -1) return;
+    const newIds = [...ids];
+    newIds.splice(fromIdx, 1);
+    newIds.splice(toIdx, 0, dragId);
+    onReorder(newIds);
+    setDragId(null);
+  };
+
+  return (
+    <Card className="p-4 flex flex-col gap-3 min-w-[300px] w-[300px] shrink-0">
+      <div className="flex items-center gap-2.5 pb-3 border-b border-line">
+        <div className="w-8 h-8 rounded-full bg-mist flex items-center justify-center text-xs font-semibold shrink-0">
+          {driver.nome.slice(0, 2).toUpperCase()}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate">{driver.nome}</p>
+          <p className="text-[11px] text-muted">{ordered.length} ST(s) na fila</p>
+        </div>
+      </div>
+
+      {ordered.length > 0 && (
+        <Button variant="outline" size="sm" icon="route" onClick={() => openMultiStopRoute(ordered, toast)}>
+          Abrir rota completa
+        </Button>
+      )}
+
+      {ordered.length === 0 ? (
+        <p className="text-xs text-muted py-6 text-center">Fila vazia</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {ordered.map((st, idx) => (
+            <div
+              key={st.id}
+              draggable
+              onDragStart={() => setDragId(st.id)}
+              onDragOver={(e) => { e.preventDefault(); setOverId(st.id); }}
+              onDragLeave={() => setOverId((cur) => (cur === st.id ? null : cur))}
+              onDrop={() => handleDrop(st.id)}
+              onDragEnd={() => { setDragId(null); setOverId(null); }}
+              className={`border rounded-xl p-3 bg-white cursor-grab active:cursor-grabbing transition-colors ${
+                overId === st.id && dragId !== st.id ? "border-brand bg-brand-soft" : "border-line hover:border-ink"
+              } ${dragId === st.id ? "opacity-40" : ""}`}
+            >
+              <div className="flex items-center gap-2">
+                <Icon name="grip-vertical" size={14} className="text-muted shrink-0" />
+                <span className="text-xs font-bold text-muted w-4 shrink-0">{idx + 1}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold st-number truncate">{st.numero}</p>
+                  <p className="text-[11px] text-muted truncate">{st.fornecedorDestino}</p>
+                </div>
+                <PriorityTag level={st.prioridade} />
+              </div>
+              <div className="mt-2"><RouteProgress status={st.status} compact /></div>
+              <div className="mt-2 flex justify-end">
+                <InlineDateEditor st={st} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function RoutePlanningPage() {
+  const { data: sts, loading } = useAllSTs();
+  const { data: drivers } = useCollection("drivers", "nome");
+  const toast = useToast();
+
+  const activeSTs = sts.filter((s) => s.motoristaId && s.status !== "finalizada");
+  const byDriver = {};
+  activeSTs.forEach((s) => {
+    (byDriver[s.motoristaId] = byDriver[s.motoristaId] || []).push(s);
+  });
+  const driversWithQueue = drivers.filter((d) => byDriver[d.id] && byDriver[d.id].length > 0);
+  const unassigned = sts.filter((s) => !s.motoristaId && s.status !== "finalizada");
+
+  const handleReorder = async (orderedIds) => {
+    try {
+      const { db, doc } = window.ST.firebase;
+      const batch = db.batch();
+      orderedIds.forEach((id, idx) => {
+        batch.update(doc(db, "transport_requests", id), { ordem: idx });
+      });
+      await batch.commit();
+    } catch (err) {
+      toast.push({ type: "error", title: "Erro ao reordenar fila", message: err.message });
+    }
+  };
+
+  return (
+    <div className="flex-1 min-h-screen bg-mist">
+      <Topbar title="Planejamento de Rotas" subtitle="Fila por motorista, ordenada por prioridade — arraste para reorganizar" />
+      <div className="p-6 flex flex-col gap-6">
+        {loading ? (
+          <div className="flex gap-4"><Skeleton className="h-64 w-[300px]" /><Skeleton className="h-64 w-[300px]" /></div>
+        ) : driversWithQueue.length === 0 ? (
+          <Card className="p-10">
+            <EmptyState icon="route" title="Nenhuma rota em andamento" subtitle="Atribua um motorista a uma ST (em Todas STs) para ela aparecer aqui." />
+          </Card>
+        ) : (
+          <div className="flex gap-4 overflow-x-auto pb-2">
+            {driversWithQueue.map((d) => (
+              <DriverQueueColumn key={d.id} driver={d} sts={byDriver[d.id]} onReorder={handleReorder} />
+            ))}
+          </div>
+        )}
+
+        {unassigned.length > 0 && (
+          <Card className="p-5">
+            <h2 className="font-display font-semibold text-sm mb-3 flex items-center gap-2">
+              <Icon name="alert-circle" size={15} className="text-brand" /> Sem motorista atribuído ({unassigned.length})
+            </h2>
+            <div className="flex flex-col divide-y divide-line">
+              {unassigned.map((st) => (
+                <div key={st.id} className="py-3 first:pt-0 last:pb-0 flex items-center gap-3">
+                  <p className="text-sm font-semibold st-number w-24 shrink-0">{st.numero}</p>
+                  <p className="text-xs text-muted flex-1 min-w-0 truncate">{st.setorNome} · {st.fornecedorDestino}</p>
+                  <PriorityTag level={st.prioridade} />
+                  <InlineDateEditor st={st} />
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function rid() {
+  return Math.random().toString(36).slice(2, 9);
+}
+
+function AttachmentThumb({ url, nome, onRemove }) {
+  const isPdf = (nome || url || "").toLowerCase().includes(".pdf");
+  return (
+    <div className="relative w-16 h-16 rounded-lg overflow-hidden border border-line group bg-mist">
+      {isPdf ? (
+        <a href={url} target="_blank" rel="noopener noreferrer" className="w-full h-full flex flex-col items-center justify-center gap-1 text-brand">
+          <Icon name="file-text" size={22} />
+          <span className="text-[8px] text-muted px-1 truncate w-full text-center">{nome || "PDF"}</span>
+        </a>
+      ) : (
+        <img src={url} className="w-full h-full object-cover" />
+      )}
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="absolute inset-0 bg-ink/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+        >
+          <Icon name="x" size={14} className="text-white" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function FileDrop({ files, onChange, existing = [], onRemoveExisting }) {
+  const inputRef = useRef(null);
+  const handleFiles = (list) => {
+    const arr = Array.from(list).filter((f) => f.type.startsWith("image/") || f.type === "application/pdf");
+    onChange([...files, ...arr]);
+  };
+  return (
+    <div>
+      <span className="block text-xs font-medium text-muted mb-1.5">Anexos (fotos ou PDF)</span>
+      <div
+        onClick={() => inputRef.current.click()}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => { e.preventDefault(); handleFiles(e.dataTransfer.files); }}
+        className="border-2 border-dashed border-line rounded-xl p-5 text-center cursor-pointer hover:border-ink transition-colors"
+      >
+        <Icon name="image-plus" size={20} className="mx-auto text-muted mb-1.5" />
+        <p className="text-xs text-muted">Clique ou arraste imagens ou PDFs aqui</p>
+        <input ref={inputRef} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
+      </div>
+      {(existing.length > 0 || files.length > 0) && (
+        <div className="flex flex-wrap gap-2 mt-3">
+          {existing.map((a) => (
+            <AttachmentThumb key={a.path} url={a.url} nome={a.nome} onRemove={onRemoveExisting ? () => onRemoveExisting(a) : null} />
+          ))}
+          {files.map((f, i) => (
+            <AttachmentThumb
+              key={i}
+              url={f.type === "application/pdf" ? null : URL.createObjectURL(f)}
+              nome={f.name}
+              onRemove={() => onChange(files.filter((_, idx) => idx !== i))}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------
+   IMPORTAÇÃO DE ITENS A PARTIR DO PDF DO PEDIDO DE COMPRAS
+   Nesse relatório, cada linha da tabela vem com as colunas coladas
+   (descrição, unidade e valores sem separação clara no texto), e a
+   descrição às vezes quebra numa segunda linha por baixo. Por isso,
+   em vez de tentar separar por texto, localizamos a coluna
+   "Descricao" pela posição (x) do próprio cabeçalho da tabela e
+   pegamos só os fragmentos de texto que caem dentro dessa faixa de
+   posição — o que funciona com qualquer conteúdo escrito ali,
+   independente do texto específico de cada PDF.
+--------------------------------------------------------------- */
+async function extractMateriaisFromPedidoComprasPDF(file) {
+  if (!window.pdfjsLib) throw new Error("Leitor de PDF não carregou (bloqueio de rede?).");
+  const buffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+
+  const words = []; // { x, y, str, page }
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    content.items.forEach((it) => {
+      const str = (it.str || "").trim();
+      if (!str) return;
+      words.push({ x: it.transform[4], y: Math.round(it.transform[5]), str, page: p });
+    });
+  }
+
+  // acha o cabeçalho "Descricao" da tabela pra saber onde essa coluna
+  // começa (e onde termina — início da próxima coluna, "U")
+  const header = words.find((w) => /^descri[cç][aã]o/i.test(w.str));
+  if (!header) return [];
+  const headerRow = words.filter((w) => w.page === header.page && w.y === header.y).sort((a, b) => a.x - b.x);
+  const headerPos = headerRow.findIndex((w) => w.x === header.x && w.str === header.str);
+  const nextHeader = headerRow[headerPos + 1];
+  const colStart = header.x - 6;
+  const colEnd = nextHeader ? nextHeader.x - 3 : header.x + 200;
+
+  const byPage = {};
+  words.forEach((w) => { (byPage[w.page] = byPage[w.page] || []).push(w); });
+
+  const items = [];
+  let current = null;
+
+  Object.keys(byPage)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .forEach((pageNum) => {
+      const rows = {};
+      byPage[pageNum].forEach((w) => { (rows[w.y] = rows[w.y] || []).push(w); });
+      Object.keys(rows)
+        .map(Number)
+        .sort((a, b) => b - a) // topo → base da página
+        .forEach((y) => {
+          const row = rows[y].sort((a, b) => a.x - b.x);
+          if (row.some((w) => /^descri[cç][aã]o/i.test(w.str))) return; // é o próprio cabeçalho
+
+          const isItemRow = /^\d{3}$/.test(row[0].str) && row[1] && /^\d{5,}$/.test(row[1].str);
+          const leftmostX = row[0].x;
+
+          const descText = row
+            .filter((w) => w.x >= colStart && w.x < colEnd)
+            .map((w) => w.str)
+            .join(" ")
+            .replace(/\s+/g, " ")
+            .trim();
+
+          if (isItemRow) {
+            if (current) items.push(current);
+            current = descText;
+          } else if (current !== null && leftmostX >= colStart && leftmostX < colEnd && descText) {
+            // linha de continuação: a descrição quebrou e o item aparece embaixo,
+            // sem nada nas colunas "Ite"/"Produto" à esquerda
+            current += " " + descText;
+          }
+        });
+    });
+
+  if (current) items.push(current);
+
+  return items.map((s) => s.replace(/\s+/g, " ").trim()).filter(Boolean);
+}
+
+function MaterialListInput({ materiais, onChange, error }) {
+  const update = (id, key, value) => onChange(materiais.map((m) => (m.id === id ? { ...m, [key]: value } : m)));
+  const add = () => onChange([...materiais, { id: rid(), descricao: "", quantidade: "", peso: "" }]);
+  const remove = (id) => onChange(materiais.length > 1 ? materiais.filter((m) => m.id !== id) : materiais);
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <span className="block text-xs font-medium text-muted">Materiais</span>
+        <Button type="button" variant="ghost" size="sm" icon="plus" onClick={add}>Adicionar material</Button>
+      </div>
+      {materiais.map((m, idx) => (
+        <div key={m.id} className="grid grid-cols-[1fr_110px_110px_36px] gap-2 items-end">
+          <Input label={idx === 0 ? "Descrição" : undefined} value={m.descricao} onChange={(e) => update(m.id, "descricao", e.target.value)} placeholder="Descrição do material" />
+          <Input label={idx === 0 ? "Qtd/volume" : undefined} value={m.quantidade} onChange={(e) => update(m.id, "quantidade", e.target.value)} placeholder="ex: 10 cx" />
+          <Input label={idx === 0 ? "Peso aprox." : undefined} value={m.peso} onChange={(e) => update(m.id, "peso", e.target.value)} placeholder="ex: 50kg" />
+          <button
+            type="button"
+            onClick={() => remove(m.id)}
+            disabled={materiais.length === 1}
+            className="w-9 h-9 rounded-lg hover:bg-brand-soft text-brand flex items-center justify-center disabled:opacity-30 disabled:pointer-events-none"
+          >
+            <Icon name="trash-2" size={14} />
+          </button>
+        </div>
+      ))}
+      {error && <span className="text-[11px] text-brand">{error}</span>}
+    </div>
+  );
+}
+
+function buildEnderecoCompleto(form) {
+  return [form.rua + (form.numeroEndereco ? `, ${form.numeroEndereco}` : ""), form.bairro, form.cidade, form.cep].filter(Boolean).join(" - ");
+}
+
+async function uploadSTFiles(files, numero) {
+  const { storage, storageRef, uploadBytes, getDownloadURL } = window.ST.firebase;
+  const anexos = [];
+  const falhas = [];
+  for (const file of files) {
+    try {
+      const path = `attachments/${numero}/${Date.now()}-${file.name}`;
+      const ref = storageRef(storage, path);
+      const { ref: uploadedRef } = await uploadBytes(ref, file);
+      const url = await getDownloadURL(uploadedRef);
+      anexos.push({ nome: file.name, url, path });
+    } catch (err) {
+      console.error(`Erro ao enviar anexo "${file.name}":`, err);
+      falhas.push(file.name);
+    }
+  }
+  return { anexos, falhas };
+}
+
+function emptyMateriais() {
+  return [{ id: rid(), descricao: "", quantidade: "", peso: "" }];
+}
+
+function materiaisFromST(st) {
+  if (st.materiais && st.materiais.length) return st.materiais.map((m) => ({ id: m.id || rid(), ...m }));
+  if (st.descricaoMaterial) return [{ id: rid(), descricao: st.descricaoMaterial, quantidade: st.quantidade || "", peso: st.pesoAproximado || "" }];
+  return emptyMateriais();
+}
+
+function NewSTForm({ profile, drivers, initial, onDone, onCancel }) {
+  const { user, profile: authProfile } = useAuth();
+  const isLogistica = authProfile?.role === "logistica";
+  const isEdit = !!initial;
+  const [form, setForm] = useState(() => ({
+    solicitanteNome: initial?.solicitanteNome || profile.nome || profile.setorNome || "",
+    tipoDemanda: initial?.tipoDemanda || "coleta",
+    fornecedorDestino: initial?.fornecedorDestino || "",
+    cep: initial?.cep || "",
+    cidade: initial?.cidade || "",
+    bairro: initial?.bairro || "",
+    rua: initial?.rua || "",
+    numeroEndereco: initial?.numeroEndereco || "",
+    complemento: initial?.complemento || "",
+    telefone: initial?.telefone || "",
+    recebedorNome: initial?.recebedorNome || "",
+    materiais: initial ? materiaisFromST(initial) : emptyMateriais(),
+    veiculoIndicado: initial?.veiculoIndicado || VEICULO_OPTIONS[0],
+    temPedidoCompra: initial?.temPedidoCompra || false,
+    pedidosCompra: initial?.pedidosCompra || "",
+    notaFiscal: initial?.notaFiscal || "",
+    dataDesejada: initial?.dataDesejada || "",
+    horario: initial?.horario || "",
+    transportadora: initial?.transportadora || "",
+    prioridade: initial?.prioridade || "media",
+    motoristaId: initial?.motoristaId || "",
+    observacoes: initial?.observacoes || "",
+    motivoReprogramacao: "",
+  }));
+  const isTerceiro = isTerceiroDemanda(form.tipoDemanda);
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [buscandoCep, setBuscandoCep] = useState(false);
+  const [importingPdf, setImportingPdf] = useState(false);
+  const pdfInputRef = useRef(null);
+  const toast = useToast();
+
+  const handlePdfMaterialFile = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    setImportingPdf(true);
+    try {
+      const descricoes = await extractMateriaisFromPedidoComprasPDF(file);
+      if (descricoes.length === 0) {
+        toast.push({
+          type: "error",
+          title: "Nenhum item encontrado no PDF",
+          message: "Não conseguimos identificar a coluna de Descrição nesse arquivo. Adicione os materiais manualmente.",
+        });
+        return;
+      }
+      setForm((f) => {
+        const existentes = f.materiais.filter((m) => m.descricao.trim());
+        const novos = descricoes.map((descricao) => ({ id: rid(), descricao, quantidade: "1", peso: "" }));
+        return { ...f, materiais: [...existentes, ...novos] };
+      });
+      toast.push({ type: "success", title: `${descricoes.length} item(ns) importado(s) do PDF` });
+    } catch (err) {
+      toast.push({ type: "error", title: "Erro ao ler o PDF", message: err.message });
+    } finally {
+      setImportingPdf(false);
+    }
+  };
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target && e.target.type === "checkbox" ? e.target.checked : e.target.value }));
+
+  useEffect(() => {
+    const digits = (form.cep || "").replace(/\D/g, "");
+    if (digits.length !== 8) return;
+    let cancelled = false;
+    (async () => {
+      setBuscandoCep(true);
+      try {
+        const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.erro) {
+          toast.push({ type: "error", title: "CEP não encontrado", message: "Confira o número ou preencha o endereço manualmente." });
+        } else {
+          setForm((f) => ({
+            ...f,
+            cidade: data.localidade || f.cidade,
+            bairro: data.bairro || f.bairro,
+            rua: data.logradouro || f.rua,
+          }));
+        }
+      } catch (err) {
+        if (!cancelled) {
+          toast.push({ type: "error", title: "Erro ao buscar CEP", message: "Verifique sua conexão ou preencha o endereço manualmente." });
+        }
+      } finally {
+        if (!cancelled) setBuscandoCep(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line
+  }, [form.cep]);
+
+  const validate = () => {
+    const err = {};
+    if (!form.fornecedorDestino.trim()) err.fornecedorDestino = "Informe o fornecedor/destino.";
+    if (!form.cidade.trim()) err.cidade = "Informe a cidade.";
+    if (!form.bairro.trim()) err.bairro = "Informe o bairro.";
+    if (!form.rua.trim()) err.rua = "Informe o endereço.";
+    if (!form.numeroEndereco.trim()) err.numeroEndereco = "Informe o número.";
+    if (!form.recebedorNome.trim()) err.recebedorNome = "Informe quem vai receber.";
+    if (!form.materiais.some((m) => m.descricao.trim())) err.materiais = "Adicione ao menos um material.";
+    if (!form.dataDesejada) err.dataDesejada = "Informe a data desejada.";
+    if (!form.horario) err.horario = "Selecione o horário.";
+    if (!form.prioridade) err.prioridade = "Selecione a prioridade.";
+    setErrors(err);
+    return Object.keys(err).length === 0;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!validate()) return;
+    setSaving(true);
+    try {
+      const { db, doc, setDoc, updateDoc, serverTimestamp } = window.ST.firebase;
+      const driver = drivers.find((d) => d.id === form.motoristaId);
+      const materiaisClean = form.materiais.filter((m) => m.descricao.trim());
+      const enderecoCompleto = buildEnderecoCompleto(form);
+      const usuarioNome = profile.nome || profile.setorNome || "Usuário";
+
+      const camposComuns = {
+        solicitanteNome: form.solicitanteNome,
+        tipoDemanda: form.tipoDemanda,
+        fornecedorDestino: form.fornecedorDestino,
+        cep: form.cep,
+        cidade: form.cidade,
+        bairro: form.bairro,
+        rua: form.rua,
+        numeroEndereco: form.numeroEndereco,
+        complemento: form.complemento,
+        enderecoCompleto,
+        telefone: form.telefone,
+        recebedorNome: form.recebedorNome,
+        materiais: materiaisClean,
+        veiculoIndicado: form.veiculoIndicado,
+        temPedidoCompra: form.temPedidoCompra,
+        pedidosCompra: form.temPedidoCompra ? form.pedidosCompra : "",
+        notaFiscal: form.notaFiscal,
+        dataDesejada: form.dataDesejada,
+        horario: form.horario,
+        prioridade: form.prioridade,
+        motoristaId: form.motoristaId || null,
+        motoristaNome: driver ? driver.nome : null,
+        observacoes: form.observacoes,
+        transportadora: form.transportadora,
+      };
+
+      if (isEdit) {
+        const numero = initial.numero;
+        const dateChanged = initial.dataDesejada && form.dataDesejada && initial.dataDesejada !== form.dataDesejada;
+
+        const updates = { ...camposComuns, updatedAt: serverTimestamp() };
+        if (isLogistica) updates.vistoPelaLogistica = true;
+        if (dateChanged) {
+          updates.reprogramacoes = [
+            ...(initial.reprogramacoes || []),
+            { dataAnterior: initial.dataDesejada, dataNova: form.dataDesejada, motivo: form.motivoReprogramacao || "", usuario: usuarioNome, registradoEm: new Date().toISOString() },
+          ];
+          if (initial.precisaReagendar) updates.precisaReagendar = false;
+        }
+
+        await updateDoc(doc(db, "transport_requests", numero), updates);
+        await addTimelineEntry(
+          numero,
+          usuarioNome,
+          dateChanged
+            ? `${usuarioNome} reprogramou a ST de ${initial.dataDesejada} para ${form.dataDesejada}${form.motivoReprogramacao ? " — " + form.motivoReprogramacao : ""}`
+            : `${usuarioNome} editou a ST`
+        );
+
+        toast.push({ type: "success", title: `${numero} atualizada` });
+        onDone && onDone(numero);
+      } else {
+        const numero = await getNextSTNumber();
+
+        const stDoc = {
+          numero,
+          setorSlug: profile.setorSlug,
+          setorNome: profile.setorNome,
+          criadoPorUid: user ? user.uid : null,
+          criadoPorNome: profile.nome || profile.setorNome,
+          ...camposComuns,
+          status: "solicitacao",
+          createdAt: serverTimestamp(),
+        };
+
+        await setDoc(doc(db, "transport_requests", numero), stDoc);
+        await addTimelineEntry(numero, usuarioNome, `${usuarioNome} criou a ST`);
+        await createNotification("role", "logistica", numero, `${usuarioNome} criou a ${numero}`);
+
+        toast.push({ type: "success", title: `${numero} criada com sucesso` });
+        onDone && onDone(numero);
+      }
+    } catch (err) {
+      toast.push({ type: "error", title: isEdit ? "Erro ao salvar alterações" : "Erro ao criar ST", message: err.message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+      <Card className="p-5 flex flex-col gap-4">
+        <h3 className="font-display font-semibold text-sm">Solicitação</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Solicitante" icon="user" value={form.solicitanteNome} disabled className="bg-mist text-muted" />
+          <Select label="Tipo de demanda" value={form.tipoDemanda} onChange={set("tipoDemanda")}>
+            {TIPO_DEMANDA_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </Select>
+        </div>
+      </Card>
+
+      <Card className="p-5 flex flex-col gap-4">
+        <h3 className="font-display font-semibold text-sm">{isTerceiro ? "Destino" : "Destino / Fornecedor"}</h3>
+        <Input label="Nome do fornecedor ou destino *" icon="factory" value={form.fornecedorDestino} onChange={set("fornecedorDestino")} error={errors.fornecedorDestino} />
+        <div className="grid grid-cols-[160px_1fr] gap-3 items-end">
+          <Input
+            label={buscandoCep ? "CEP (buscando...)" : "CEP"}
+            icon="search"
+            value={form.cep}
+            onChange={set("cep")}
+            placeholder="00000-000"
+            maxLength={9}
+          />
+          <p className="text-[11px] text-muted pb-2.5">Preenche cidade, bairro e rua automaticamente</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Cidade *" icon="map-pin" value={form.cidade} onChange={set("cidade")} error={errors.cidade} />
+          <Input label="Bairro *" value={form.bairro} onChange={set("bairro")} error={errors.bairro} />
+        </div>
+        <div className="grid grid-cols-[1fr_120px] gap-3">
+          <Input label="Endereço (rua) *" value={form.rua} onChange={set("rua")} error={errors.rua} />
+          <Input label="Número *" value={form.numeroEndereco} onChange={set("numeroEndereco")} error={errors.numeroEndereco} />
+        </div>
+        <Input label="Complemento" value={form.complemento} onChange={set("complemento")} />
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Telefone" icon="phone" value={form.telefone} onChange={set("telefone")} />
+          <Input label="Nome de quem receberá *" icon="user-check" value={form.recebedorNome} onChange={set("recebedorNome")} error={errors.recebedorNome} />
+        </div>
+      </Card>
+
+      {isTerceiro && (
+        <Card className="p-5 flex flex-col gap-3 border-2 border-blue-300">
+          <h3 className="font-display font-semibold text-sm flex items-center gap-2">
+            <Icon name="truck" size={15} className="text-blue-500" /> Transportadora
+          </h3>
+          <p className="text-xs text-muted -mt-2">Se você já souber qual transportadora vai atender, informe abaixo. Se não souber, a Logística define depois.</p>
+          <Input label="Nome da transportadora (opcional)" icon="building-2" value={form.transportadora} onChange={set("transportadora")} />
+        </Card>
+      )}
+
+      <Card className="p-5 flex flex-col gap-4">
+        <h3 className="font-display font-semibold text-sm">Material *</h3>
+        <div className="flex items-center justify-between gap-3 bg-mist rounded-xl px-3 py-2.5">
+          <div className="flex items-center gap-2 text-xs text-muted min-w-0">
+            <Icon name="file-text" size={15} className="text-brand shrink-0" />
+            <span className="truncate">Importe os itens direto do PDF do Pedido de Compras</span>
+          </div>
+          <Button type="button" variant="outline" size="sm" icon="upload" disabled={importingPdf} onClick={() => pdfInputRef.current.click()}>
+            {importingPdf ? "Lendo PDF..." : "Ler PDF"}
+          </Button>
+          <input ref={pdfInputRef} type="file" accept="application/pdf" className="hidden" onChange={handlePdfMaterialFile} />
+        </div>
+        <MaterialListInput materiais={form.materiais} onChange={(materiais) => setForm((f) => ({ ...f, materiais }))} error={errors.materiais} />
+        <Select label="Tipo de veículo indicado" value={form.veiculoIndicado} onChange={set("veiculoIndicado")}>
+          {VEICULO_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+        </Select>
+      </Card>
+
+      <Card className="p-5 flex flex-col gap-4">
+        <h3 className="font-display font-semibold text-sm">Documentos</h3>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={form.temPedidoCompra} onChange={set("temPedidoCompra")} className="w-4 h-4 rounded accent-brand" />
+          Possui Pedido de Compra
+        </label>
+        {form.temPedidoCompra && (
+          <Input label="Número(s) do(s) pedido(s)" placeholder="separe por vírgula" value={form.pedidosCompra} onChange={set("pedidosCompra")} />
+        )}
+        <Input label="Número da Nota Fiscal" value={form.notaFiscal} onChange={set("notaFiscal")} />
+      </Card>
+
+      <Card className="p-5 flex flex-col gap-4">
+        <h3 className="font-display font-semibold text-sm">Prazo e prioridade *</h3>
+        {!isEdit && (
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Data desejada *" type="date" value={form.dataDesejada} onChange={set("dataDesejada")} error={errors.dataDesejada} />
+            <Input label="Horário *" type="time" min="06:00" max="18:00" value={form.horario} onChange={set("horario")} error={errors.horario} />
+          </div>
+        )}
+        {isEdit && (
+          <Input label="Horário *" type="time" min="06:00" max="18:00" value={form.horario} onChange={set("horario")} error={errors.horario} />
+        )}
+        <Select label="Prioridade *" value={form.prioridade} onChange={set("prioridade")} error={errors.prioridade}>
+          {Object.entries(PRIORITY_MAP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+        </Select>
+        {isLogistica ? (
+          <Select label="Motorista" value={form.motoristaId} onChange={set("motoristaId")}>
+            <option value="">A definir</option>
+            {drivers.map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}
+          </Select>
+        ) : (
+          initial?.motoristaNome && (
+            <p className="text-xs text-muted">Motorista: <span className="text-ink font-medium">{initial.motoristaNome}</span> (definido pela Logística)</p>
+          )
+        )}
+        <Input
+          label="Observações"
+          icon="message-square"
+          value={form.observacoes}
+          onChange={set("observacoes")}
+          placeholder="qualquer informação adicional relevante para a Logística ou o motorista"
+        />
+      </Card>
+
+      {isEdit && (
+        <Card className="p-5 flex flex-col gap-4 border-2 border-brand/25">
+          <h3 className="font-display font-semibold text-sm flex items-center gap-2">
+            <Icon name="history" size={15} className="text-brand" /> Reprogramação
+          </h3>
+          <p className="text-xs text-muted -mt-2">
+            Mudar a data fica registrado no histórico da ST — assim dá pra acompanhar o que já foi programado e não atendido.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Data desejada original" type="date" value={initial.dataDesejada || ""} disabled className="bg-mist text-muted" />
+            <Input label="Nova data desejada" type="date" value={form.dataDesejada} onChange={set("dataDesejada")} error={errors.dataDesejada} />
+          </div>
+          <Input label="Motivo da reprogramação (opcional)" value={form.motivoReprogramacao} onChange={set("motivoReprogramacao")} placeholder="ex: fornecedor não tinha o material pronto" />
+          {initial.reprogramacoes && initial.reprogramacoes.length > 0 && (
+            <div className="bg-mist rounded-xl p-3 flex flex-col gap-1.5">
+              <p className="text-xs font-medium text-ink">Histórico de reprogramações ({initial.reprogramacoes.length})</p>
+              {initial.reprogramacoes.map((r, i) => (
+                <p key={i} className="text-[11px] text-muted">
+                  {r.usuario} mudou de <span className="st-number">{r.dataAnterior}</span> para <span className="st-number">{r.dataNova}</span>
+                  {r.motivo ? ` — ${r.motivo}` : ""}
+                </p>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="ghost" onClick={() => (onCancel ? onCancel() : navigate("/minhas-sts"))}>Cancelar</Button>
+        <Button type="submit" variant="brand" disabled={saving}>
+          {saving ? "Salvando..." : isEdit ? "Salvar alterações" : "Criar ST"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function NovaSTPage() {
+  const { profile } = useAuth();
+  const { data: drivers } = useCollection("drivers", "nome");
+  return (
+    <div className="flex-1 min-h-screen bg-mist">
+      <Topbar title="Nova ST" subtitle="Preencha os dados da solicitação de transporte" />
+      <div className="p-6 max-w-2xl">
+        <NewSTForm profile={profile} drivers={drivers} onDone={() => navigate("/minhas-sts")} />
+      </div>
+    </div>
+  );
+}
+
+function openRouteInMaps(st) {
+  const q = encodeURIComponent(st.enderecoCompleto || st.cidade || "");
+  window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank");
+}
+
+// Abre uma rota com várias paradas de uma vez, na ordem passada (a mesma
+// ordem já definida no Planejamento de Rotas / fila do motorista).
+// Grátis — usa a URL pública do Google Maps, sem precisar de chave de API.
+function openMultiStopRoute(stsOrdenadas, toast) {
+  const enderecos = stsOrdenadas
+    .map((st) => st.enderecoCompleto || st.cidade || "")
+    .filter(Boolean)
+    .map((e) => encodeURIComponent(e));
+
+  if (enderecos.length === 0) {
+    if (toast) toast.push({ type: "error", title: "Nenhum endereço disponível nessa fila" });
+    return;
+  }
+  if (enderecos.length === 1) {
+    window.open(`https://www.google.com/maps/search/?api=1&query=${enderecos[0]}`, "_blank");
+    return;
+  }
+  const limitado = enderecos.slice(0, 10);
+  if (enderecos.length > 10 && toast) {
+    toast.push({
+      type: "error",
+      title: "Rota com muitas paradas",
+      message: "O Google Maps só aceita até 10 endereços de uma vez — abrindo as 10 primeiras da fila.",
+      duration: 6000,
+    });
+  }
+  window.open(`https://www.google.com/maps/dir/${limitado.join("/")}`, "_blank");
+}
+
+function STCard({ st, children, highlightNew = false }) {
+  const materiais = st.materiais && st.materiais.length ? st.materiais : (st.descricaoMaterial ? [{ descricao: st.descricaoMaterial }] : []);
+  const reprogramacoes = st.reprogramacoes || [];
+  const isTerceiro = isTerceiroDemanda(st.tipoDemanda);
+  const isNew = highlightNew && st.status === "solicitacao" && !st.vistoPelaLogistica;
+  const [showMateriais, setShowMateriais] = useState(false);
+
+  return (
+    <Card className={`p-4 flex flex-col gap-3 ${st.precisaReagendar ? "border-2 border-brand" : isTerceiro ? "border-2 border-blue-300" : ""}`}>
+      {st.precisaReagendar && (
+        <div className="bg-brand-soft text-brand text-[11px] font-semibold px-3 py-2 rounded-lg flex items-center gap-2 -m-1 mb-0">
+          <Icon name="calendar-x" size={13} className="shrink-0" />
+          Não atendida — motorista não conseguiu concluir. Precisa reagendar.
+        </div>
+      )}
+      {isTerceiro && !st.precisaReagendar && (
+        <div className="bg-blue-50 text-blue-700 text-[11px] font-semibold px-3 py-2 rounded-lg flex items-center gap-2 -m-1 mb-0">
+          <Icon name="truck" size={13} className="shrink-0" />
+          Transporte por terceiro{st.transportadora ? ` — ${st.transportadora}` : " — transportadora a definir"}
+        </div>
+      )}
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold st-number">{st.numero}</p>
+          <p className="text-xs text-muted mt-0.5">{st.fornecedorDestino}</p>
+        </div>
+        <div className="flex flex-col items-end gap-1.5">
+          {isNew && <span className="text-[10px] font-bold text-white bg-brand px-2 py-0.5 rounded-full">NOVO</span>}
+          <StatusBadge status={st.status} />
+          <PriorityTag level={st.prioridade} />
+        </div>
+      </div>
+      <RouteProgress status={st.status} compact precisaReagendar={st.precisaReagendar} />
+      {materiais.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setShowMateriais(true)}
+          className="text-xs text-left flex items-center gap-1.5 min-w-0 group"
+        >
+          <Icon name="package" size={12} className="shrink-0 text-ink" />
+          <span className="font-semibold text-ink underline decoration-dotted underline-offset-2 group-hover:text-brand shrink-0">Descrição</span>
+          <span className="text-muted truncate">
+            — {materiais[0].descricao}
+            {materiais.length > 1 && ` +${materiais.length - 1} item(ns)`}
+          </span>
+        </button>
+      )}
+      {st.observacoes && (
+        <p className="text-xs text-muted italic truncate">
+          <Icon name="message-square" size={12} className="inline mr-1 -mt-0.5" />
+          {st.observacoes}
+        </p>
+      )}
+      <div className="text-xs text-muted flex flex-wrap gap-x-4 gap-y-1">
+        <span className="flex items-center gap-1"><Icon name="map-pin" size={12} />{st.cidade}</span>
+        {st.motoristaNome && <span className="flex items-center gap-1"><Icon name="truck" size={12} />{st.motoristaNome}</span>}
+        {st.dataDesejada && <span className="flex items-center gap-1"><Icon name="calendar" size={12} />{st.dataDesejada}</span>}
+        {st.horario && <span className="flex items-center gap-1"><Icon name="clock" size={12} />{st.horario}</span>}
+        {st.criadoPorNome && <span className="flex items-center gap-1"><Icon name="user" size={12} />{st.criadoPorNome}</span>}
+      </div>
+      {reprogramacoes.length > 0 && (
+        <div className="text-[11px] text-muted bg-mist rounded-lg px-2.5 py-1.5 flex flex-wrap items-center gap-1">
+          <Icon name="history" size={12} className="text-brand shrink-0" />
+          <span className="text-ink font-medium st-number">{reprogramacoes[0].dataAnterior}</span>
+          {reprogramacoes.map((r, i) => (
+            <span key={i} className="flex items-center gap-1">
+              <Icon name="arrow-right" size={10} />
+              <span className={i === reprogramacoes.length - 1 ? "text-brand font-medium st-number" : "text-muted st-number"}>{r.dataNova}</span>
+            </span>
+          ))}
+        </div>
+      )}
+      {st.anexos && st.anexos.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {st.anexos.map((a) => <AttachmentThumb key={a.path} url={a.url} nome={a.nome} />)}
+        </div>
+      )}
+      {children}
+      <Modal open={showMateriais} onClose={() => setShowMateriais(false)} title={`Descrição — ${st.numero}`} maxWidth="max-w-lg">
+        <div className="flex flex-col gap-4">
+          {st.recebedorNome && (
+            <div className="bg-mist rounded-xl p-3 flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-full bg-ink text-white flex items-center justify-center shrink-0">
+                <Icon name="user-check" size={15} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] text-muted">Quem vai receber</p>
+                <p className="text-sm font-semibold text-ink truncate">{st.recebedorNome}</p>
+              </div>
+            </div>
+          )}
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-medium text-muted">O que buscar/levar ({materiais.length})</p>
+            {materiais.map((m, i) => (
+              <div key={i} className="border border-line rounded-lg p-3 flex items-start gap-2.5">
+                <Icon name="package" size={14} className="text-brand mt-0.5 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm text-ink">{m.descricao}</p>
+                  {(m.quantidade || m.peso) && (
+                    <p className="text-[11px] text-muted mt-0.5">
+                      {m.quantidade && `Qtd/volume: ${m.quantidade}`}
+                      {m.quantidade && m.peso ? " · " : ""}
+                      {m.peso && `Peso aprox.: ${m.peso}`}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Modal>
+    </Card>
+  );
+}
+
+function MinhasSTsPage() {
+  const { user, profile } = useAuth();
+  const { data: sts, loading } = useSTsWhere("criadoPorUid", user?.uid);
+  const { data: drivers } = useCollection("drivers", "nome");
+  const [editing, setEditing] = useState(null);
+  const [historyItem, setHistoryItem] = useState(null);
+  const [filterStatus, setFilterStatus] = useState("todas");
+  const [search, setSearch] = useState("");
+  const [filterMotorista, setFilterMotorista] = useState("");
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+
+  const hasActiveFilters = search.trim() || filterMotorista || dataInicio || dataFim;
+
+  const filtered = sts
+    .filter((s) => filterStatus === "todas" || s.status === filterStatus)
+    .filter((s) => !filterMotorista || s.motoristaId === filterMotorista)
+    .filter((s) => !dataInicio || (s.dataDesejada && s.dataDesejada >= dataInicio))
+    .filter((s) => !dataFim || (s.dataDesejada && s.dataDesejada <= dataFim))
+    .filter((s) => {
+      if (!search.trim()) return true;
+      const q = search.trim().toLowerCase();
+      return [s.numero, s.fornecedorDestino, s.notaFiscal, s.pedidosCompra, s.cidade].some((v) => (v || "").toLowerCase().includes(q));
+    });
+
+  return (
+    <div className="flex-1 min-h-screen bg-mist">
+      <Topbar title="Minhas STs" subtitle={`Solicitações criadas por ${profile.nome || profile.setorNome}`} />
+      <div className="p-6 flex flex-col gap-4">
+        <div className="flex justify-end">
+          <Button variant="brand" size="sm" icon="plus" onClick={() => navigate("/nova-st")}>Nova ST</Button>
+        </div>
+
+        <Card className="p-4">
+          <div className="grid md:grid-cols-4 gap-3">
+            <Input icon="search" placeholder="Nº, fornecedor, pedido, NF..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Select value={filterMotorista} onChange={(e) => setFilterMotorista(e.target.value)}>
+              <option value="">Todos os motoristas</option>
+              {drivers.map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}
+            </Select>
+            <Input type="date" placeholder="Data de" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
+            <Input type="date" placeholder="Data até" value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
+          </div>
+          {hasActiveFilters && (
+            <button onClick={() => { setSearch(""); setFilterMotorista(""); setDataInicio(""); setDataFim(""); }} className="text-[11px] text-brand hover:underline mt-2">
+              Limpar filtros
+            </button>
+          )}
+        </Card>
+
+        <Tabs
+          active={filterStatus}
+          onChange={setFilterStatus}
+          tabs={[
+            { value: "todas", label: "Todas" },
+            { value: "solicitacao", label: "Solicitação" },
+            { value: "programada", label: "Programada" },
+            { value: "em_rota", label: "Em Rota" },
+            { value: "finalizada", label: "Finalizada" },
+          ]}
+        />
+
+        {loading ? (
+          <div className="grid md:grid-cols-2 gap-4">
+            <Skeleton className="h-40" />
+            <Skeleton className="h-40" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <Card className="p-10">
+            <EmptyState
+              icon="inbox"
+              title={sts.length === 0 ? "Nenhuma ST criada ainda" : "Nenhuma ST encontrada"}
+              subtitle={sts.length === 0 ? "Clique em “Nova ST” para solicitar uma coleta ou entrega." : "Tente ajustar ou limpar os filtros."}
+            />
+          </Card>
+        ) : (
+          <div className="grid md:grid-cols-2 gap-4">
+            {filtered.map((st) => (
+              <STCard key={st.id} st={st}>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" icon="map" onClick={() => openRouteInMaps(st)}>Abrir rota</Button>
+                  <Button variant="subtle" size="sm" icon="pencil" onClick={() => setEditing(st)}>Editar</Button>
+                  <Button variant="ghost" size="sm" icon="history" onClick={() => setHistoryItem(st)}>Histórico</Button>
+                </div>
+              </STCard>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <Modal open={!!editing} onClose={() => setEditing(null)} title={editing ? `Editar ${editing.numero}` : ""} maxWidth="max-w-2xl">
+        {editing && <NewSTForm profile={profile} drivers={drivers} initial={editing} onDone={() => setEditing(null)} onCancel={() => setEditing(null)} />}
+      </Modal>
+      <TimelineModal st={historyItem} onClose={() => setHistoryItem(null)} />
+    </div>
+  );
+}
+
+function ReagendarModal({ st, onClose, onConfirm, saving }) {
+  const [motivo, setMotivo] = useState("");
+  useEffect(() => { setMotivo(""); }, [st]);
+  return (
+    <Modal
+      open={!!st}
+      onClose={onClose}
+      title={st ? `Reagendar ${st.numero}` : ""}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button variant="brand" disabled={saving} onClick={() => onConfirm(motivo)}>
+            {saving ? "Enviando..." : "Confirmar reagendamento"}
+          </Button>
+        </>
+      }
+    >
+      <p className="text-sm text-muted mb-3">
+        Isso avisa a Logística que essa ST não foi atendida no local e precisa de uma nova data.
+      </p>
+      <Input label="Motivo (opcional)" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="ex: material não estava pronto" />
+    </Modal>
+  );
+}
+
+/* ---------------------------------------------------------------
+   LOCALIZAÇÃO DO MOTORISTA (tempo real, versão simples)
+   Enquanto o motorista tiver uma ST "Em Rota" e o app aberto, o
+   navegador compartilha a posição periodicamente. Guardamos só a
+   última posição conhecida em drivers/{id} — sem mapa incorporado,
+   só "há X min" + abrir no Google Maps.
+--------------------------------------------------------------- */
+function useDriverLocationSharing(driverId, isActive) {
+  const [sharing, setSharing] = useState(false);
+  useEffect(() => {
+    if (!isActive || !driverId || !("geolocation" in navigator)) {
+      setSharing(false);
+      return;
+    }
+    let lastWrite = 0;
+    setSharing(true);
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const now = Date.now();
+        if (now - lastWrite < 20000) return; // no máximo 1 gravação a cada 20s
+        lastWrite = now;
+        const { db, doc, updateDoc } = window.ST.firebase;
+        updateDoc(doc(db, "drivers", driverId), {
+          lastLocation: { lat: pos.coords.latitude, lng: pos.coords.longitude },
+          lastLocationAtMs: now,
+        }).catch((err) => console.error("Erro ao salvar localização:", err));
+      },
+      (err) => console.error("Erro de geolocalização:", err),
+      { enableHighAccuracy: false, maximumAge: 15000, timeout: 20000 }
+    );
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+      setSharing(false);
+    };
+  }, [driverId, isActive]);
+  return sharing;
+}
+
+function timeAgo(ms) {
+  if (!ms) return "";
+  const diffMin = Math.round((Date.now() - ms) / 60000);
+  if (diffMin < 1) return "agora mesmo";
+  if (diffMin < 60) return `há ${diffMin} min`;
+  const diffH = Math.round(diffMin / 60);
+  if (diffH < 24) return `há ${diffH}h`;
+  return `há ${Math.round(diffH / 24)}d`;
+}
+
+function openLatLngInMaps(lat, lng) {
+  window.open(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`, "_blank");
+}
+
+function DriverLocationBadge({ driver }) {
+  if (!driver.lastLocation) {
+    return <span className="text-[11px] text-muted">Sem localização recente</span>;
+  }
+  return (
+    <button
+      onClick={() => openLatLngInMaps(driver.lastLocation.lat, driver.lastLocation.lng)}
+      className="text-[11px] text-ink hover:text-brand flex items-center gap-1 transition-colors"
+    >
+      <Icon name="map-pin" size={12} />
+      Última localização {timeAgo(driver.lastLocationAtMs)}
+    </button>
+  );
+}
+
+function MotoristaSTsPage() {
+  const { profile } = useAuth();
+  const { data: sts, loading } = useSTsWhere("motoristaId", profile.driverId);
+  const toast = useToast();
+  const [updating, setUpdating] = useState(null);
+  const [historyItem, setHistoryItem] = useState(null);
+  const [reagendarItem, setReagendarItem] = useState(null);
+  const [reagendando, setReagendando] = useState(false);
+  const hasActiveRoute = sts.some((s) => s.status === "em_rota");
+  const sharingLocation = useDriverLocationSharing(profile.driverId, hasActiveRoute);
+
+  const advance = async (st, novoStatus, acao) => {
+    setUpdating(st.id);
+    try {
+      const { db, doc, updateDoc } = window.ST.firebase;
+      await updateDoc(doc(db, "transport_requests", st.id), { status: novoStatus });
+      await addTimelineEntry(st.numero, profile.nome, acao);
+      if (st.setorSlug) {
+        const msg = novoStatus === "em_rota"
+          ? `O motorista iniciou a rota da sua ST ${st.numero}`
+          : novoStatus === "finalizada"
+          ? `Sua ST ${st.numero} foi finalizada`
+          : null;
+        if (msg) await createNotification("setor", st.setorSlug, st.numero, msg);
+      }
+      toast.push({ type: "success", title: "Status atualizado" });
+    } catch (err) {
+      toast.push({ type: "error", title: "Erro ao atualizar", message: err.message });
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const handleReagendar = async (motivo) => {
+    const st = reagendarItem;
+    setReagendando(true);
+    try {
+      const { db, doc, updateDoc } = window.ST.firebase;
+      await updateDoc(doc(db, "transport_requests", st.id), {
+        status: "solicitacao",
+        precisaReagendar: true,
+        motivoNaoAtendida: motivo || "",
+        motoristaId: null,
+        motoristaNome: null,
+      });
+      await addTimelineEntry(
+        st.numero,
+        profile.nome,
+        `${profile.nome} não conseguiu concluir a ${st.numero} — precisa reagendar${motivo ? `: ${motivo}` : ""}`
+      );
+      await createNotification("role", "logistica", st.numero, `${st.numero} não foi atendida pelo motorista e precisa ser reagendada${motivo ? ` — ${motivo}` : ""}`);
+      toast.push({ type: "success", title: "Reagendamento solicitado", message: "A Logística foi avisada." });
+      setReagendarItem(null);
+    } catch (err) {
+      toast.push({ type: "error", title: "Erro ao solicitar reagendamento", message: err.message });
+    } finally {
+      setReagendando(false);
+    }
+  };
+
+  const fila = sortQueue(sts.filter((s) => s.status !== "finalizada"));
+  const concluidas = sts.filter((s) => s.status === "finalizada");
+
+  return (
+    <div className="flex-1 min-h-screen bg-mist">
+      <Topbar title="Minhas STs" subtitle={`Rotas atribuídas a ${profile.nome}`} />
+      <div className="p-6 flex flex-col gap-6">
+        {sharingLocation && (
+          <div className="flex items-center gap-2 text-xs text-muted bg-white border border-line rounded-xl px-3 py-2 w-fit">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulseDot" />
+            Compartilhando sua localização com a Logística enquanto a rota estiver ativa
+          </div>
+        )}
+        {loading ? (
+          <div className="grid md:grid-cols-2 gap-4"><Skeleton className="h-44" /><Skeleton className="h-44" /></div>
+        ) : sts.length === 0 ? (
+          <Card className="p-10"><EmptyState icon="truck" title="Nenhuma ST atribuída" subtitle="Quando a Logística te atribuir uma rota, ela aparece aqui." /></Card>
+        ) : (
+          <>
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-display font-semibold text-sm">Sua rota de hoje — em ordem</h2>
+                {fila.length > 1 && (
+                  <Button variant="brand" size="sm" icon="route" onClick={() => openMultiStopRoute(fila, toast)}>
+                    Abrir rota do dia
+                  </Button>
+                )}
+              </div>
+              {fila.length === 0 ? (
+                <Card className="p-8"><EmptyState icon="check-circle-2" title="Nada pendente" subtitle="Todas as suas STs foram concluídas." /></Card>
+              ) : (
+                <div className="grid md:grid-cols-2 gap-4">
+                  {fila.map((st, idx) => (
+                    <STCard key={st.id} st={st}>
+                      <div className="flex items-center gap-2 -mt-1 mb-1">
+                        <span className="w-5 h-5 rounded-full bg-ink text-white text-[11px] font-bold flex items-center justify-center shrink-0">{idx + 1}</span>
+                        <span className="text-[11px] text-muted">na sua fila</span>
+                      </div>
+                      <p className="text-xs text-muted">{st.enderecoCompleto}</p>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        <Button variant="outline" size="sm" icon="map" onClick={() => openRouteInMaps(st)}>Abrir rota</Button>
+                        {(st.status === "solicitacao" || st.status === "programada") && (
+                          <Button variant="brand" size="sm" icon="navigation" disabled={updating === st.id} onClick={() => advance(st, "em_rota", `${profile.nome} iniciou a rota`)}>
+                            Ir para destino
+                          </Button>
+                        )}
+                        {st.status === "em_rota" && (
+                          <>
+                            <Button variant="brand" size="sm" icon="check" disabled={updating === st.id} onClick={() => advance(st, "finalizada", `${profile.nome} finalizou a entrega`)}>
+                              Finalizar ST
+                            </Button>
+                            <Button variant="outline" size="sm" icon="calendar-x" disabled={updating === st.id} onClick={() => setReagendarItem(st)}>
+                              Reagendar
+                            </Button>
+                          </>
+                        )}
+                        <Button variant="ghost" size="sm" icon="history" onClick={() => setHistoryItem(st)}>Histórico</Button>
+                      </div>
+                    </STCard>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {concluidas.length > 0 && (
+              <div>
+                <h2 className="font-display font-semibold text-sm mb-3">Concluídas</h2>
+                <div className="grid md:grid-cols-2 gap-4">
+                  {concluidas.map((st) => (
+                    <STCard key={st.id} st={st}>
+                      <Button variant="ghost" size="sm" icon="history" onClick={() => setHistoryItem(st)}>Histórico</Button>
+                    </STCard>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+      <TimelineModal st={historyItem} onClose={() => setHistoryItem(null)} />
+      <ReagendarModal st={reagendarItem} saving={reagendando} onClose={() => setReagendarItem(null)} onConfirm={handleReagendar} />
+    </div>
+  );
+}
+
+function TodasSTsPage() {
+  const { profile } = useAuth();
+  const { data: sts, loading } = useAllSTs();
+  const { data: drivers } = useCollection("drivers", "nome");
+  const [filter, setFilter] = useState("todas");
+  const [search, setSearch] = useState("");
+  const [filterSetor, setFilterSetor] = useState("");
+  const [filterMotorista, setFilterMotorista] = useState("");
+  const [filterVeiculo, setFilterVeiculo] = useState("");
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+  const [managing, setManaging] = useState(null);
+  const [editingFull, setEditingFull] = useState(null);
+  const [historyItem, setHistoryItem] = useState(null);
+  const [toDelete, setToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [concluding, setConcluding] = useState(null);
+  const toast = useToast();
+
+  const hasActiveFilters = search.trim() || filterSetor || filterMotorista || filterVeiculo || dataInicio || dataFim;
+
+  const filtered = sts
+    .filter((s) => filter === "todas" ? true : filter === "reagendar" ? s.precisaReagendar : s.status === filter)
+    .filter((s) => !filterSetor || s.setorSlug === filterSetor)
+    .filter((s) => !filterMotorista || s.motoristaId === filterMotorista)
+    .filter((s) => !filterVeiculo || s.veiculoIndicado === filterVeiculo)
+    .filter((s) => !dataInicio || (s.dataDesejada && s.dataDesejada >= dataInicio))
+    .filter((s) => !dataFim || (s.dataDesejada && s.dataDesejada <= dataFim))
+    .filter((s) => {
+      if (!search.trim()) return true;
+      const q = search.trim().toLowerCase();
+      return [s.numero, s.fornecedorDestino, s.solicitanteNome, s.criadoPorNome, s.notaFiscal, s.pedidosCompra, s.cidade]
+        .some((v) => (v || "").toLowerCase().includes(q));
+    });
+
+  const saveAssignment = async (st, motoristaId, status, dataDesejada, horario) => {
+    try {
+      await applySTAssignment(st, motoristaId, status, dataDesejada, horario, drivers);
+      toast.push({ type: "success", title: "ST atualizada" });
+      setManaging(null);
+    } catch (err) {
+      toast.push({ type: "error", title: "Erro ao atualizar", message: err.message });
+    }
+  };
+
+  const markAsConcluded = async (st) => {
+    setConcluding(st.id);
+    try {
+      const { db, doc, updateDoc } = window.ST.firebase;
+      await updateDoc(doc(db, "transport_requests", st.id), { status: "finalizada", vistoPelaLogistica: true });
+      await addTimelineEntry(st.numero, "Logística", "Logística marcou a ST como concluída");
+      if (st.setorSlug) {
+        await createNotification("setor", st.setorSlug, st.numero, `Sua ST ${st.numero} foi finalizada`);
+      }
+      toast.push({ type: "success", title: "ST marcada como concluída" });
+    } catch (err) {
+      toast.push({ type: "error", title: "Erro ao concluir", message: err.message });
+    } finally {
+      setConcluding(null);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      const { db, doc, deleteDoc, storageRef, deleteObject, storage } = window.ST.firebase;
+      // best-effort: remove os anexos do Storage também (não trava a exclusão se falhar)
+      if (toDelete.anexos && toDelete.anexos.length) {
+        await Promise.all(
+          toDelete.anexos.map((a) => deleteObject(storageRef(storage, a.path)).catch(() => {}))
+        );
+      }
+      await deleteDoc(doc(db, "transport_requests", toDelete.id));
+      await addTimelineEntry(toDelete.numero, "Logística", "Logística excluiu a ST");
+      toast.push({ type: "success", title: `${toDelete.numero} excluída` });
+      setToDelete(null);
+    } catch (err) {
+      toast.push({ type: "error", title: "Erro ao excluir", message: err.message });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="flex-1 min-h-screen bg-mist">
+      <Topbar title="Todas STs" subtitle={`${sts.length} solicitação(ões) no total`} />
+      <div className="p-6 flex flex-col gap-4">
+        <Card className="p-4">
+          <div className="grid md:grid-cols-4 gap-3">
+            <div className="md:col-span-1">
+              <Input icon="search" placeholder="Nº, fornecedor, solicitante, pedido, NF..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            </div>
+            <Select value={filterSetor} onChange={(e) => setFilterSetor(e.target.value)}>
+              <option value="">Todos os setores</option>
+              {DEPARTMENTS.map((d) => <option key={d.slug} value={d.slug}>{d.nome}</option>)}
+            </Select>
+            <Select value={filterMotorista} onChange={(e) => setFilterMotorista(e.target.value)}>
+              <option value="">Todos os motoristas</option>
+              {drivers.map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}
+            </Select>
+            <Select value={filterVeiculo} onChange={(e) => setFilterVeiculo(e.target.value)}>
+              <option value="">Todos os veículos</option>
+              {VEICULO_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+            </Select>
+            <Input type="date" placeholder="Data de" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
+            <Input type="date" placeholder="Data até" value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
+          </div>
+          {hasActiveFilters && (
+            <button
+              onClick={() => { setSearch(""); setFilterSetor(""); setFilterMotorista(""); setFilterVeiculo(""); setDataInicio(""); setDataFim(""); }}
+              className="text-[11px] text-brand mt-2 hover:underline"
+            >
+              Limpar filtros
+            </button>
+          )}
+        </Card>
+
+        <Tabs
+          active={filter}
+          onChange={setFilter}
+          tabs={[
+            { value: "todas", label: "Todas" },
+            { value: "solicitacao", label: "Solicitação" },
+            { value: "programada", label: "Programada" },
+            { value: "em_rota", label: "Em Rota" },
+            { value: "finalizada", label: "Finalizada" },
+            { value: "reagendar", label: "Precisa Reagendar" },
+          ]}
+        />
+        {loading ? (
+          <div className="grid md:grid-cols-2 gap-4"><Skeleton className="h-40" /><Skeleton className="h-40" /></div>
+        ) : filtered.length === 0 ? (
+          <Card className="p-10"><EmptyState icon="inbox" title="Nenhuma ST encontrada" subtitle={hasActiveFilters ? "Tente ajustar ou limpar os filtros." : undefined} /></Card>
+        ) : (
+          <div className="grid md:grid-cols-2 gap-4">
+            {filtered.map((st) => (
+              <STCard key={st.id} st={st} highlightNew>
+                <p className="text-xs text-muted truncate">{st.setorNome} · {st.solicitanteNome}</p>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  <Button variant="outline" size="sm" icon="map" onClick={() => openRouteInMaps(st)}>Abrir rota</Button>
+                  {st.status !== "finalizada" && (
+                    <Button variant="brand" size="sm" icon="check-circle-2" disabled={concluding === st.id} onClick={() => markAsConcluded(st)}>
+                      {concluding === st.id ? "Concluindo..." : "Marcar como concluída"}
+                    </Button>
+                  )}
+                  <Button variant="subtle" size="sm" icon="shuffle" onClick={() => setManaging(st)}>Gerenciar</Button>
+                  <Button variant="subtle" size="sm" icon="pencil" onClick={() => setEditingFull(st)}>Editar</Button>
+                  <Button variant="ghost" size="sm" icon="history" onClick={() => setHistoryItem(st)}>Histórico</Button>
+                  <Button variant="ghost" size="sm" icon="trash-2" className="text-brand hover:bg-brand-soft" onClick={() => setToDelete(st)}>Excluir</Button>
+                </div>
+              </STCard>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <Modal open={!!managing} onClose={() => setManaging(null)} title={managing ? `Gerenciar ${managing.numero}` : ""}>
+        {managing && <ManageSTForm st={managing} drivers={drivers} onSave={saveAssignment} onCancel={() => setManaging(null)} />}
+      </Modal>
+
+      <Modal open={!!editingFull} onClose={() => setEditingFull(null)} title={editingFull ? `Editar ${editingFull.numero}` : ""} maxWidth="max-w-2xl">
+        {editingFull && <NewSTForm profile={profile} drivers={drivers} initial={editingFull} onDone={() => setEditingFull(null)} onCancel={() => setEditingFull(null)} />}
+      </Modal>
+      <TimelineModal st={historyItem} onClose={() => setHistoryItem(null)} />
+      <ConfirmDialog
+        open={!!toDelete}
+        loading={deleting}
+        onClose={() => setToDelete(null)}
+        onConfirm={handleDelete}
+        title="Excluir ST"
+        message={toDelete ? `Tem certeza que deseja excluir a ${toDelete.numero}? Isso remove a solicitação e seus anexos permanentemente — o histórico não poderá mais ser consultado.` : ""}
+      />
+    </div>
+  );
+}
+
+function ManageSTForm({ st, drivers, onSave, onCancel }) {
+  const [motoristaId, setMotoristaId] = useState(st.motoristaId || "");
+  const [status, setStatus] = useState(st.status);
+  const [dataDesejada, setDataDesejada] = useState(st.dataDesejada || "");
+  const [horario, setHorario] = useState(st.horario || "");
+  const [saving, setSaving] = useState(false);
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-2 gap-3">
+        <Input label="Dia" type="date" value={dataDesejada} onChange={(e) => setDataDesejada(e.target.value)} />
+        <Input label="Horário" type="time" min="06:00" max="18:00" value={horario} onChange={(e) => setHorario(e.target.value)} />
+      </div>
+      <Select label="Motorista" value={motoristaId} onChange={(e) => setMotoristaId(e.target.value)}>
+        <option value="">Não atribuído</option>
+        {drivers.map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}
+      </Select>
+      <Select label="Status" value={status} onChange={(e) => setStatus(e.target.value)}>
+        {Object.entries(STATUS_MAP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+      </Select>
+      <div className="flex justify-end gap-2 mt-1">
+        <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
+        <Button variant="brand" disabled={saving} onClick={async () => { setSaving(true); await onSave(st, motoristaId, status, dataDesejada, horario); setSaving(false); }}>
+          {saving ? "Salvando..." : "Salvar"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------
+   APP ROOT
+--------------------------------------------------------------- */
+function FullScreenSpinner() {
+  return (
+    <div className="min-h-screen bg-ink flex flex-col items-center justify-center gap-4">
+      <div className="w-12 h-12 rounded-2xl bg-brand flex items-center justify-center font-display font-bold text-white animate-pulseDot">ST</div>
+      <p className="text-white/40 text-xs">Carregando...</p>
+    </div>
+  );
+}
+
+const SETOR_ROUTES = {
+  "/dashboard": () => <SetorDashboardPage />,
+  "/nova-st": () => <NovaSTPage />,
+  "/minhas-sts": () => <MinhasSTsPage />,
+  "/motoristas": () => <AcompanharMotoristasPage />,
+  "/notificacoes": () => <NotificationsPage />,
+  "/perfil": () => <ProfilePage />,
+};
+
+const LOGISTICA_ROUTES = {
+  "/dashboard": () => <LogisticaDashboardPage />,
+  "/todas-sts": () => <TodasSTsPage />,
+  "/programacao": () => <ProgramacaoPage />,
+  "/gestao-motoristas": () => <CadastrosPage />,
+  "/veiculos": () => <CadastrosPage />,
+  "/rotas": () => <RoutePlanningPage />,
+  "/cadastros": () => <CadastrosPage />,
+  "/relatorios": () => <ReportsPage />,
+  "/configuracoes": () => <SettingsPage />,
+  "/notificacoes": () => <NotificationsPage />,
+};
+
+const MOTORISTA_ROUTES = {
+  "/dashboard": () => <MotoristaSTsPage />,
+  "/perfil": () => <ProfilePage />,
+};
+
+function AppShell() {
+  const router = useRouter();
+  const { user, profile, authLoading, logout } = useAuth();
+
+  useEffect(() => {
+    refreshIcons();
+  });
+
+  // aguarda o Firebase resolver o estado de autenticação antes de decidir a rota
+  if (authLoading) {
+    return <FullScreenSpinner />;
+  }
+
+  const isLoginRoute = router.path === "/login" || router.path === "/";
+
+  // não autenticado tentando acessar área interna → login
+  if (!user && !isLoginRoute) {
+    navigate("/login");
+    return <FullScreenSpinner />;
+  }
+
+  // autenticado tentando acessar /login → manda para o dashboard
+  if (user && isLoginRoute) {
+    navigate("/dashboard");
+    return <FullScreenSpinner />;
+  }
+
+  if (!user) {
+    return <LoginPage />;
+  }
+
+  // usuário autenticado, mas sem doc de perfil (ex: usuário excluído pela Logística)
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-ink flex items-center justify-center p-6">
+        <div className="max-w-sm text-center text-white">
+          <div className="w-12 h-12 rounded-2xl bg-brand flex items-center justify-center font-display font-bold mx-auto mb-4">!</div>
+          <p className="font-display font-semibold mb-2">Conta sem acesso</p>
+          <p className="text-sm text-white/60 mb-4">Seu usuário não tem mais um perfil válido no sistema. Fale com a Logística.</p>
+          <Button variant="outline" size="sm" className="bg-transparent text-white border-white/20 hover:border-white" onClick={() => logout()}>
+            Sair
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const isLogistica = profile.role === "logistica";
+  const isMotorista = profile.role === "motorista";
+  const isUsuario = !isLogistica && !isMotorista;
+  const menu = isLogistica ? LOGISTICA_MENU : isMotorista ? MOTORISTA_MENU : SETOR_MENU;
+  const routes = isLogistica ? LOGISTICA_ROUTES : isMotorista ? MOTORISTA_ROUTES : SETOR_ROUTES;
+  const page = (routes[router.path] || routes["/dashboard"])();
+
+  return (
+    <div className="flex">
+      <Sidebar
+        items={menu}
+        sectorName={isUsuario ? (profile.nome || profile.setorNome) : (profile.setorNome || profile.nome)}
+        subLabel={isUsuario ? profile.setorNome : "Sair"}
+      />
+      {page}
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <RouterProvider>
+      <AuthProvider>
+        <ToastProvider>
+          <AppShell />
+        </ToastProvider>
+      </AuthProvider>
+    </RouterProvider>
+  );
+}
+
+/* Mount */
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+
+// remove boot screen assim que o React montar
+requestAnimationFrame(() => {
+  const boot = document.getElementById("boot-screen");
+  if (boot) {
+    boot.style.transition = "opacity .3s ease";
+    boot.style.opacity = "0";
+    setTimeout(() => boot.remove(), 300);
+  }
+  refreshIcons();
+});
+
+// registra o service worker (PWA) — só funciona servido via http(s), nunca via file://
+if ("serviceWorker" in navigator && window.location.protocol !== "file:") {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(console.error);
+  });
+}
+</script>
+
+<!-- ============================================================
+     BOOTSTRAP DO APP — transforma e executa o script acima
+     manualmente (em vez de deixar o Babel escanear a página
+     sozinho), evitando qualquer conflito com outros scripts.
+     ============================================================ -->
+<script>
+  (function boot() {
+    try {
+      const source = document.getElementById("app-source").textContent;
+      const output = Babel.transform(source, { presets: ["react"] }).code;
+      const script = document.createElement("script");
+      script.textContent = output;
+      document.body.appendChild(script);
+    } catch (err) {
+      console.error("Erro ao iniciar o app:", err);
+      const boot = document.getElementById("boot-screen");
+      if (boot) {
+        boot.innerHTML =
+          '<div style="max-width:340px;text-align:center;color:#fff;font-family:Inter,sans-serif;font-size:13px;line-height:1.6;padding:0 16px">' +
+          '<div style="font-weight:600;margin-bottom:8px">Erro ao carregar o app</div>' +
+          String(err.message || err) +
+          '<br/><br/>Abra o Console (F12) para mais detalhes.</div>';
+      }
+    }
+  })();
+</script>
+</body>
+</html>
